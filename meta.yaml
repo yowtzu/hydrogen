@@ -19,6 +19,8 @@ requirements:
     - numpy
     - pandas
     - nose
+    - matplotlib
+    - seaborn
 
   # Python imports
   #imports:
