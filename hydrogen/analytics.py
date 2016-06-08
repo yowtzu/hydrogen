@@ -44,6 +44,23 @@ def _vol_atr(price_df: pd.DataFrame, **kwargs):
     return average_true_range_series
 
 
+def summary(df: pd.DataFrame, **kwargs):
+    stats = df.describe()
+
+    median = df.median()
+    median.name = 'median'
+
+    skew = df.skew()
+    skew.name = 'skew'
+
+    kurtosis = df.kurtosis()
+    kurtosis.name = 'kurtosis'
+
+    corr = df.corr()
+
+    return stats.append(median).append(skew).append(kurtosis), corr
+
+
 def bootstrap(price_df: pd.DataFrame, period=1):
     return_ts = np.log(price_df.CLOSE).diff(period=period)
     # sample from return_ts

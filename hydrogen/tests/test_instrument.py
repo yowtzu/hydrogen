@@ -40,6 +40,8 @@ class FutureTest(unittest.TestCase):
 
     def test_resolve_ticker(self):
         future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=self.as_of_date)
+        logging.debug('Future %s resolved to the following:', self.future_Z_1_Index_ticker)
+        logging.debug(future_Z_1_Index._resolve_ticker(self.future_Z_1_Index_ticker))
         self.assertEqual(future_Z_1_Index._resolve_ticker(self.future_Z_1_Index_ticker), "Z [A-Z][0-9]+ Index")
 
         future_CLH15_Comdty = Future(self.future_CLH15_Comdty_ticker, as_of_date=self.as_of_date)
@@ -57,25 +59,47 @@ class FutureTest(unittest.TestCase):
         self.assertEqual(future_CLH15_Comdty.static_df.TICKER.values, np.array(self.future_CLH15_Comdty_ticker))
 
         assert_frame_equal(future_CLH15_Comdty.static_df,
-                           future_CLH15_Comdty.static_df.sort(columns="FUT_NOTICE_FIRST"))
+                           future_CLH15_Comdty.static_df.sort_values(by="FUT_NOTICE_FIRST"))
 
     def test_ticker_list(self):
         future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=self.as_of_date)
         tickers = future_Z_1_Index.ticker_list()
         [self.assertRegex(text, "Z [A-Z][0-9]+ Index") for text in tickers]
-        assert_array_equal(tickers, future_Z_1_Index.static_df.sort(columns="FUT_NOTICE_FIRST").TICKER.values)
+        logging.debug(tickers)
+        assert_array_equal(tickers, future_Z_1_Index.static_df.sort_values(by="FUT_NOTICE_FIRST").TICKER.values)
 
     def test_read_daily_csv(self):
+        future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        df = future_Z_1_Index._read_ohlcv('Z M6 Index', pd.tslib.Timestamp.min, pd.tslib.Timestamp.max)
+        self.assertEqual(df.index[0], pd.datetime(2015, 6, 22))
+        self.assertEqual(df.index[-1], pd.datetime(2016, 3, 21))
+
+    def test_get_panama_adj_dates(self):
         future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=self.as_of_date)
-        ohlcv_df = future_Z_1_Index.read_daily_csv()
-        self.assertEquals(len(ohlcv_df), 9821)
+        adj_dates = future_Z_1_Index.get_adj_dates(-1)
+        logging.debug(adj_dates)
+        self.assertEqual(adj_dates.TICKER.iloc[0], 'Z H05 Index')
+        self.assertEqual(adj_dates.FUT_NOTICE_FIRST.iloc[0], pd.datetime(2005, 3, 18))
+        self.assertEqual(adj_dates.START_DATE.iloc[0], pd.tslib.Timestamp.min)
+        self.assertEqual(adj_dates.END_DATE.iloc[0], pd.datetime(2005, 3, 17))
 
-        future_CLH14_Comdty = Future(self.future_CLH14_Comdty_ticker, as_of_date=self.as_of_date)
-        ohlcv_df = future_CLH14_Comdty.read_daily_csv()
-        self.assertEquals(len(ohlcv_df), 1321)
+    def test_roll_adj_panama(self):
+        future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        df, adj = future_Z_1_Index.adj_close_price(future_Z_1_Index.get_adj_dates(n_day=-1))
+        self.assertEqual(df.ix[0], 3970.5)
+        self.assertEqual(adj.ix['20050616'], -884.5)
 
-    def test_adj(self):
-        pass
+    def test_roll_adj_ratios(self):
+        future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        df, adj = future_Z_1_Index.adj_close_price(future_Z_1_Index.get_adj_dates(n_day=-1), method='ratio')
+        self.assertEqual(df.ix[0], 4164.0823710527939)
+        self.assertEqual(adj.ix['20050616'], 0.85776142863478932)
+
+    def test_roll_adj_none(self):
+        future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        df, adj = future_Z_1_Index.adj_close_price(future_Z_1_Index.get_adj_dates(n_day=-1), method='none')
+        self.assertEqual(df.ix[0], 4834.5)
+        self.assertEqual(np.isnan(adj.ix['20050616']), True)
 
 
 if __name__ == '__main__':
