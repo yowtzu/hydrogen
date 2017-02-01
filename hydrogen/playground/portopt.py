@@ -83,7 +83,7 @@ def mean_var_port_opt(means, sigma_mat):
 
     bounds = [(0.0, 1.0)] * n_assets
     constraint_dict = [{'type': 'eq', 'fun': lambda weights: 1 - sum(weights)}]
-    1
+
     solution = minimize(port_SR_negative_riskfree, initial_weights, (means, sigma_mat), method='SLSQP', bounds=bounds,
                         constraints=constraint_dict, tol=0.00001)
     return solution['x']
@@ -115,7 +115,7 @@ def bootstrap_port_opt(return_df, use_equal_means=False, use_standardise_vol=Fal
     return (weights_mat.T / weights_mat.sum(axis=1)).mean(axis=1)
 
 
-def port_opt(return_df, fit_method, data_split_method,  n_roll_days=256, **kwargs):
+def port_opt(return_df, fit_method, data_split_method,  n_roll_days=256, step=22, **kwargs):
     df_list = generate_fitting_period(return_df, data_split_method, n_roll_days)
 
     weights_df_list = []
@@ -123,7 +123,7 @@ def port_opt(return_df, fit_method, data_split_method,  n_roll_days=256, **kwarg
     port_opt_helper = {'handcrafted': handcrafted_port_opt,
                        'one_period': markotwitz_port_opt,
                        'bootstrap': bootstrap_port_opt}[fit_method]
-    for df in df_list:
+    for df in df_list[::step]:
         print('Optimising portfolio using data between {start_date} and {end_date}'.format(start_date=df.index[0],
                                                                                            end_date=df.index[-1]))
 
@@ -132,7 +132,7 @@ def port_opt(return_df, fit_method, data_split_method,  n_roll_days=256, **kwarg
         weights_df = pd.DataFrame(weights.reshape(1, -1), [df.index[-1]], daily_df.columns)
 
         weights_df_list.append(weights_df)
-        print(weights_df)
+
     return pd.concat(weights_df_list)
 
 fileName = '~/repo/hydrogen/hydrogen/playground/data/three_assets.csv'
