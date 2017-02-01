@@ -1,14 +1,141 @@
-import datetime
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import scipy.optimize._minimize as minimize
-import copy
-import random
+from scipy.optimize import minimize
 
+
+def port_mean(weights, means):
+    ''' returns the mean of a portfolio given component means and sigma '''
+    return weights.dot(means)
+
+
+def port_var(weights, sigma_mat):
+    ''' returns the variance of a portfolio given component weights and sigma '''
+    return weights.dot(sigma_mat).dot(weights.transpose())
+
+
+def port_SR(weights, means, sigma_mat, risk_free_rates=0.0):
+    ''' returns the SR of a portfolio given component weights and sigma '''
+    return port_mean(weights, means - risk_free_rates) / port_var(weights, sigma_mat) ** .5
+
+
+def port_SR_negative_riskfree(weights, means, sigma_mat):
+    ''' returns the negative SR of a portfolio given component weights and sigma '''
+    return -port_SR(weights, means, sigma_mat, risk_free_rates=0.0)
+
+
+def standardise_vol(return_df, annualised_target_vol):
+    return return_df / return_df.std(axis=0) * (annualised_target_vol / 16)
+
+
+def handcrafted_port_opt(return_df, use_standardise_vol=False, annualised_target_vol=0.2):
+    ''' Hand crafting portfolio weights '''
+    n_assets = return_df.shape[1]
+
+    if (not use_standardise_vol) or (n_assets > 3):
+        raise Exception("handcrafting_weight only works with 3 or fewer assets with same vol")
+    else:
+        return_df = standardise_vol(return_df, annualised_target_vol)
+
+    def round_to_nearest(xs, refs=np.array([0, 0.25, 0.5, 0.75, 0.9])):
+        ## return x rounded to nearest value in ref
+        return refs[np.argmin(np.abs(np.repeat(xs.reshape(-1, 1), len(refs), axis=1) - refs), 1)]
+
+    def weights_lookup(corr_values):
+        cor_to_weights = pd.read_csv("~/repo/hydrogen/hydrogen/playground/data/cor_to_weights.csv",
+                                     index_col=('c1', 'c2', 'c3'))
+        indices = round_to_nearest(corr_values)
+        return cor_to_weights.ix[indices[0]].ix[indices[1]].ix[indices[2]].values
+
+    if n_assets < 3:
+        return np.ones(n_assets) / n_assets
+    elif n_assets == 3:
+        corr_mat = return_df.corr().values
+        off_diagonal_corr_values = corr_mat[np.triu_indices(3, 1)]
+        return weights_lookup(off_diagonal_corr_values)
+    else:
+        raise NotImplementedError('This line should never be reached')
+
+
+def generate_fitting_period(return_df, data_split_method, n_roll_days=256):
+    ''' Assume return_df has daily index '''
+    supported_method = ['in_sample', 'rolling', 'expanding']
+
+    if data_split_method == 'in_sample':
+        df_list = [return_df]
+    elif data_split_method == 'rolling':
+        df_list = [daily_df[start_date:end_date] for start_date, end_date
+                   in zip(daily_df.index[:-n_roll_days + 1], daily_df.index[n_roll_days - 1:] )]
+    elif data_split_method == 'expanding':
+        df_list = [daily_df[:end_date] for end_date
+                   in daily_df.index[n_roll_days - 1:]]
+    else:
+        raise Exception(
+            'Unregonised data split method: {method}. Supported methods are {supported_method}.'.format(
+                method=data_split_method,
+                supported_method=supported_method))
+    return df_list
+
+
+def mean_var_port_opt(means, sigma_mat):
+    n_assets = len(means)
+
+    initial_weights = np.ones(n_assets).reshape([1, -1]) / n_assets
+
+    bounds = [(0.0, 1.0)] * n_assets
+    constraint_dict = [{'type': 'eq', 'fun': lambda weights: 1 - sum(weights)}]
+    1
+    solution = minimize(port_SR_negative_riskfree, initial_weights, (means, sigma_mat), method='SLSQP', bounds=bounds,
+                        constraints=constraint_dict, tol=0.00001)
+    return solution['x']
+
+
+def markotwitz_port_opt(return_df, use_equal_means=False, use_standardise_vol=False, annualised_target_vol=0.2):
+    n_assets = return_df.shape[1]
+
+    if use_standardise_vol:
+        return_df = standardise_vol(return_df, annualised_target_vol)
+        return_df = standardise_vol(return_df, annualised_target_vol)
+
+    sigma_mat = return_df.cov().values
+
+    if use_equal_means:
+        means = np.ones(n_assets) * return_df.mean(axis=0).mean()
+    else:
+        means = return_df.mean(axis=0)
+
+    return mean_var_port_opt(means, sigma_mat)
+
+
+def bootstrap_port_opt(return_df, use_equal_means=False, use_standardise_vol=False, annualised_target_vol=0.2,
+                       n_bootstrap_run=100, n_samples_per_run=256):
+    ''' Monte_carlo number of bootstrap, not block bootstrap '''
+    weights_mat = np.array([markotwitz_port_opt(return_df.sample(n=n_samples_per_run, replace=True), use_equal_means,
+                                                use_standardise_vol, annualised_target_vol) for _ in
+                            range(n_bootstrap_run)])
+    return (weights_mat.T / weights_mat.sum(axis=1)).mean(axis=1)
+
+
+def port_opt(return_df, fit_method, data_split_method,  n_roll_days=256, **kwargs):
+    df_list = generate_fitting_period(return_df, data_split_method, n_roll_days)
+
+    weights_df_list = []
+
+    port_opt_helper = {'handcrafted': handcrafted_port_opt,
+                       'one_period': markotwitz_port_opt,
+                       'bootstrap': bootstrap_port_opt}[fit_method]
+    for df in df_list:
+        print('Optimising portfolio using data between {start_date} and {end_date}'.format(start_date=df.index[0],
+                                                                                           end_date=df.index[-1]))
+
+        weights = port_opt_helper(df, **kwargs)
+
+        weights_df = pd.DataFrame(weights.reshape(1, -1), [df.index[-1]], daily_df.columns)
+
+        weights_df_list.append(weights_df)
+        print(weights_df)
+    return pd.concat(weights_df_list)
 
 fileName = '~/repo/hydrogen/hydrogen/playground/data/three_assets.csv'
-cor_to_weights = pd.read_csv("~/repo/hydrogen/hydrogen/playground/data/cor_to_weights.csv", index_col=('c1', 'c2', 'c3'))
 
 daily_df = pd.read_csv(fileName, index_col=['date'], parse_dates=['date'])
 daily_df = daily_df.fillna(0)
@@ -16,55 +143,19 @@ daily_df = daily_df.fillna(0)
 ## Down-sample to weekly
 weekly_df = daily_df.resample('1W').sum().diff()
 
-# calculate correlation
-daily_df.corr()
-weekly_df.corr()
+res = port_opt(daily_df, 'one_period', 'in_sample')
 
-## Let's do some optimisation
-## Feel free to play with these
+res1 = port_opt(daily_df, 'one_period', 'in_sample', use_standardise_vol=True)
 
-def port_mean(weights, means):
-    ''' returns the mean of a portfolio given component means and sigma '''
-    return (weights*means).sum().item(0,0)
+res2 = port_opt(daily_df, 'one_period', 'in_sample', use_equal_means=True, use_standardise_vol=True)
 
-def port_var(weights, sigma_mat):
-    ''' returns the cov_mat of a portfolio given component weights and sigma '''
-    weights_row_matrix = weights.reshape([1, -1])
-    return (weights_row_matrix * sigma_mat * weights_row_matrix.transpose()).item(0,0)
+#####
+res3 = port_opt(daily_df, 'bootstrap', 'in_sample', use_standardise_vol=True , n_bootstrap_run=1024)
 
-def port_SR(weights, means, cov_mat, risk_free_rates=0.0):
-    ''' returns the SR of a portfolio given component weights and sigma '''
-    return port_mean(weights, means-risk_free_rates)/(weights, cov_mat)**.5
+res4 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True)
 
-def port_SR_negative(weights, means, cov_mat, risk_free_rates=0.0):
-    ''' returns the negative SR of a portfolio given component weights and sigma '''
-    return -port_SR(weights, means, cov_mat, risk_free_rates)
+res5 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True, n_roll_days=256*5)
 
+res6 = port_opt(daily_df, 'one_period', 'expanding', use_standardise_vol=True)
 
-def round_to_nearest(xs, refs=np.array([0.25, 0.5, 0.9])):
-    ## return x rounded to nearest value in ref
-    return refs[np.argmin(np.abs(np.repeat(xs.reshape(-1, 1), 3, axis=1) - refs), 1)]
-
-def cor_to_cov(std, cor):
-    return std * cor * std
-
-def weights_lookup(rounded_corr_values):
-    cor_to_weights
-    assert rounded_corr_values.shape == (3,3)
-    return np.ones(3)/3
-
-def handcrafting_weight_three(standardised_return_df):
-    ''' Hand crafting portfolio weights '''
-    n_asset = len(standardised_return_df.columns)
-    sd = standardised_return_df.std()
-    is_vol_standardised = (1 - (sd.max() - sd.min())) < 0.05
-    if not(is_vol_standardised) & (n_asset > 3):
-        raise Exception("handcrafting_weight only works with 3 or fewer assets with same vol")
-
-    if (n_asset < 3):
-        return np.ones(n_asset)/n_asset
-    else: # n_asset==3
-        corr_mat = standardised_return_df.corr().values
-        off_diagonal_corr_values = corr_mat[np.triu_indices(3, 1)]
-        rounded_corr_values = round_to_nearest(off_diagonal_corr_values)
-        return weights_lookup(rounded_corr_values)
+res7 = port_opt(daily_df, 'bootstrap', 'expanding', use_standardise_vol=True, n_bootstrap_run=1024)
