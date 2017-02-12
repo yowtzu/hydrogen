@@ -12,6 +12,9 @@ STATIC_FILE_NAME = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
 
 ALL_TICKERS = pd.read_csv(CONFIG_FILE_NAME).TICKER.values
 
+# remove FX Curncy as they are not future
+ALL_TICKERS = [ ticker for ticker in ALL_TICKERS if not ticker.endswith(" Curncy") ]
+
 logging.debug('Step 1: Begin to download static data for %i future instruments: %s', len(ALL_TICKERS), ALL_TICKERS)
 blp_service = blp.BLPService()
 df_list = []
