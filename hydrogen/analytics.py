@@ -60,7 +60,3 @@ def summary(df: pd.DataFrame, **kwargs):
 
     return stats.append(median).append(skew).append(kurtosis), corr
 
-
-def bootstrap(price_df: pd.DataFrame, period=1):
-    return_ts = np.log(price_df.CLOSE).diff(period=period)
-    # sample from return_ts
