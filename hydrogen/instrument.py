@@ -47,8 +47,8 @@ class Future:
         self.as_of_date = as_of_date
         self._ticker_pattern = self._resolve_ticker(ticker)
         self.static_df = self._read_static_csv(self._ticker_pattern)
-        self.cont_size = self.static_df.FUT_CONT_SIZE.unique()
-        self.tick_size = self.static_df.FUT_TICK_SIZE.unique()
+        self.cont_size = self.static_df.FUT_CONT_SIZE.values[0]
+        self.tick_size = self.static_df.FUT_TICK_SIZE.values[0]
 
         # self.ohlcv = self._read_daily_csv()
         # self.ohlcv_adj = self.roll_adj(self.ohlcv, method='panama',  adj_values=False)
@@ -99,9 +99,6 @@ class Future:
         if method not in ['ratio', 'panama', 'no_adj']:
             raise ValueError('method is not valid: ' + method)
 
-        if method == 'no_adj':
-            adj_dates = pd.DataFrame(columns=['Date', 'Adjustment'])
-
         if not isinstance(adj_dates, pd.DataFrame):
             raise ValueError('Calendar must be pandas DataFrame')
 
@@ -121,7 +118,7 @@ class Future:
             adj = (adj / df.asof(adj.index))
             adj = adj[::-1].cumprod()[::-1].reindex(df.index, method='bfill').fillna(1)
             df = (df * adj)
-        elif method == 'none':
+        elif method == 'no_adj':
             adj[:] = np.nan
             df = df
 
