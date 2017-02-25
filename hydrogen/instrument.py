@@ -5,6 +5,7 @@ import os
 import re
 import settings
 from pandas.tseries.offsets import BDay
+import hydrogen.analytics
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -35,7 +36,6 @@ class FX:
 
     def close_price(self):
         return self._read_ohlcv.CLOSE
-
 
 class Future:
     _STATIC_FULL_PATH = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
@@ -84,6 +84,7 @@ class Future:
             ohlcv_df = ohlcv_df[start_date:end_date]
             # only see data up to t-1 from as of date (inclusively)
             ohlcv_df = ohlcv_df[:self.as_of_date]
+            ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
 
         return ohlcv_df
 
@@ -94,7 +95,7 @@ class Future:
         roll_dates['NEXT_TICKER'] = roll_dates.TICKER.shift(-1).fillna('')
         return roll_dates
 
-    def close_price(self, adj_dates: pd.DataFrame = None, method='panama'):
+    def ohlcv(self, adj_dates: pd.DataFrame = None, method='panama'):
 
         if method not in ['ratio', 'panama', 'no_adj']:
             raise ValueError('method is not valid: ' + method)
@@ -104,27 +105,44 @@ class Future:
 
         df = pd.concat([self._read_ohlcv(row.TICKER, row.START_DATE, row.END_DATE)
                         for _, row in adj_dates.iterrows()])
-        df = df.CLOSE
+        close = df.CLOSE
 
-        adj = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.END_DATE, row.END_DATE)
+        next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.END_DATE, row.END_DATE)
                          for _, row in adj_dates.iterrows()])
-        adj = adj.CLOSE
+        next_close = next_df.CLOSE
 
         if method == 'panama':
-            adj = (adj - df.asof(adj.index))
+            adj = (next_close - close.asof(next_close.index))
             adj = adj[::-1].cumsum()[::-1].reindex(df.index, method='bfill').fillna(0)
-            df = (df + adj)
+            df.OPEN = (df.OPEN + adj)
+            df.HIGH = (df.HIGH + adj)
+            df.LOW = (df.LOW + adj)
+            df.CLOSE = (df.CLOSE + adj)
         elif method == 'ratio':
-            adj = (adj / df.asof(adj.index))
+            adj = (next_close / close.asof(next_close.index))
             adj = adj[::-1].cumprod()[::-1].reindex(df.index, method='bfill').fillna(1)
-            df = (df * adj)
+            df.OPEN = (df.OPEN * adj)
+            df.HIGH = (df.HIGH * adj)
+            df.LOW = (df.LOW * adj)
+            df.CLOSE = (df.CLOSE * adj)
         elif method == 'no_adj':
-            adj[:] = np.nan
-            df = df
+            adj = next_close # to get the data frame shape
+            adj[:] = 0
 
-        logging.debug(adj)
         return df, adj
 
+    def vol_standardised_close_price(self):
+        adj_dates = self.get_adj_dates(n_day=-1)
+        ohlcv, _ = self.ohlcv(adj_dates=adj_dates, method='panama')
+        vol = hydrogen.analytics.vol(ohlcv, method='YZ', window=22)
+
+        return ohlcv.CLOSE/vol
+
+    def ewma_price(self, **kwargs):
+        adj_dates = self.get_adj_dates(n_day=-1)
+        ohlcv, _ = self.ohlcv(adj_dates=adj_dates, method='panama')
+
+        return ohlcv.CLOSE.ewm(**kwargs).mean()
 
     def carry(self):
         front_adj_dates = self.get_adj_dates(n_day=-1)

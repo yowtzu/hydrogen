@@ -21,18 +21,22 @@ class AnalyticsTest(unittest.TestCase):
         pass
 
     def setUp(self):
-        self.future_Z_1_Index_ticker = "Z 1 Index"
-        self.future_CLH14_Comdty_ticker = "CLH14 Comdty"
-        self.future_CLH15_Comdty_ticker = "CLH15 Comdty"
-        self.as_of_date = pd.datetime(year=2010, month=3, day=21)
-        self.future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=self.as_of_date)
+        future_Z_1_Index_ticker = "Z 1 Index"
+        as_of_date = pd.datetime(year=2010, month=3, day=21)
+        future_Z_1_Index = Future(future_Z_1_Index_ticker, as_of_date=as_of_date)
+        self.ohlcv, adj = future_Z_1_Index.ohlcv(future_Z_1_Index.get_adj_dates(n_day=-1), method='no_adj')
         pass
 
     def tearDown(self):
         pass
 
     def test_price_vol(self):
-        pass
+        a = (hydrogen.analytics.vol(self.ohlcv, method='SD', window=21))
+        b = (hydrogen.analytics.vol(self.ohlcv, method='ATR', window=21))
+        c = (hydrogen.analytics.vol(self.ohlcv, method='YZ', window=21))
+        d = (hydrogen.analytics.vol(self.ohlcv, method='RS', window=21))
+        res = pd.concat([a, b, c, d], axis=1)
+        print(res)
 
     def test_adj(self):
         pass

@@ -85,21 +85,25 @@ class FutureTest(unittest.TestCase):
 
     def test_roll_panama(self):
         future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        df, adj = future_Z_1_Index.close_price(future_Z_1_Index.get_adj_dates(n_day=-1))
-        self.assertEqual(df.ix[0], 3970.5)
+        df, adj = future_Z_1_Index.ohlcv(future_Z_1_Index.get_adj_dates(n_day=-1))
+        self.assertEqual(df.CLOSE.ix[0], 3970.5)
         self.assertEqual(adj.ix['20050616'], -884.5)
 
     def test_roll_ratios(self):
         future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        df, adj = future_Z_1_Index.close_price(future_Z_1_Index.get_adj_dates(n_day=-1), method='ratio')
-        self.assertEqual(df.ix[0], 4164.0823710527939)
+        df, adj = future_Z_1_Index.ohlcv(future_Z_1_Index.get_adj_dates(n_day=-1), method='ratio')
+        self.assertEqual(df.CLOSE.ix[0], 4164.0823710527939)
         self.assertEqual(adj.ix['20050616'], 0.85776142863478932)
 
     def test_roll_no_adj(self):
         future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        df, adj = future_Z_1_Index.close_price(future_Z_1_Index.get_adj_dates(n_day=-1), method='no_adj')
-        self.assertEqual(df.ix[0], 4834.5)
-        self.assertEqual(np.isnan(adj.ix['20050616']), True)
+        df, adj = future_Z_1_Index.ohlcv(future_Z_1_Index.get_adj_dates(n_day=-1), method='no_adj')
+        self.assertEqual(df.CLOSE.ix[0], 4834.5)
+        self.assertEqual(0 == adj.ix['20050616'], True)
+
+    def test_vol_standardised_close_price(self):
+        future_Z_1_Index = Future(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        future_Z_1_Index.vol_standardised_close_price()
 
 
 if __name__ == '__main__':
