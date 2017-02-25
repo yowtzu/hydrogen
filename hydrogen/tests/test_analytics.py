@@ -36,7 +36,7 @@ class AnalyticsTest(unittest.TestCase):
         c = (hydrogen.analytics.vol(self.ohlcv, method='YZ', window=21))
         d = (hydrogen.analytics.vol(self.ohlcv, method='RS', window=21))
         res = pd.concat([a, b, c, d], axis=1)
-        print(res)
+        logger.debug(res)
 
     def test_adj(self):
         pass
