@@ -5,8 +5,32 @@ import pandas as pd
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+'''' Some date constants '''
 
-def vol(price_df: pd.DataFrame, method: str = 'SD', **kwargs) -> pd.TimeSeries:
+N_DAYS_IN_YEAR = 365.25
+N_BDAYS_IN_YEAR = 252.0
+
+ROOT_N_BDAYS_IN_YEAR = np.sqrt(N_BDAYS_IN_YEAR)
+
+N_WEEKS_IN_YEAR = N_DAYS_IN_YEAR / 7.0
+ROOT_N_WEEKS_IN_YEAR = np.sqrt(N_WEEKS_IN_YEAR)
+
+N_MONTHS_IN_YEAR = 12.0
+ROOT_N_MONTHS_IN_YEAR = np.sqrt(N_MONTHS_IN_YEAR)
+
+EPOCH=pd.datetime(2000,1,1)
+
+def nearest_date_after(dates: pd.Series, pivot_date: pd.tslib.Timestamp):
+    res = dates[pivot_date < dates]
+    return res[0] if not res.empty else None
+
+
+def nearest_date_before(dates: pd.Series, pivot_date: pd.tslib.Timestamp):
+    res = dates[dates < pivot_date]
+    return res.iloc[-1] if not res.empty else None
+
+
+def vol(price_df: pd.DataFrame, method: str = 'YZ', price_scale = True, annualised=False, **kwargs) -> pd.TimeSeries:
     """
 
     Args:
@@ -18,13 +42,20 @@ def vol(price_df: pd.DataFrame, method: str = 'SD', **kwargs) -> pd.TimeSeries:
 
     """
 
-    return {
+    res = {
         'SD': _vol_std_dev,
         'ATR': _vol_atr,
         'RS': _vol_rs,
         'YZ':_vol_yz
     }.get(method)(price_df, **kwargs)
 
+    if price_scale:
+        res *= price_df.CLOSE
+
+    if annualised:
+        res *= ROOT_N_BDAYS_IN_YEAR
+
+    return res
 
 def _vol_std_dev(price_df: pd.DataFrame, ewm=False, **kwargs) -> pd.TimeSeries:
     price_df["CLOSE_PREV"] = price_df.CLOSE.shift(1)
@@ -34,7 +65,7 @@ def _vol_std_dev(price_df: pd.DataFrame, ewm=False, **kwargs) -> pd.TimeSeries:
     else:
         res = np.log(price_df.CLOSE/price_df.CLOSE_PREV).rolling(**kwargs).std()
 
-    return np.sqrt(252)*res
+    return res
 
 def _vol_atr(price_df: pd.DataFrame,  ewm=False, **kwargs):
     price_df["CLOSE_PREV"] = price_df.CLOSE.shift(1)
@@ -48,7 +79,7 @@ def _vol_atr(price_df: pd.DataFrame,  ewm=False, **kwargs):
     else:
         average_true_range_series = true_range_series.rolling(**kwargs).mean()  # i.e., span=27, alpha=1/14
 
-    return np.sqrt(252) * average_true_range_series / price_df.CLOSE / 1.645
+    return average_true_range_series / price_df.CLOSE / 1.645
 
 
 def _vol_rs(price_df: pd.DataFrame, ewm=False, **kwargs):
@@ -60,13 +91,13 @@ def _vol_rs(price_df: pd.DataFrame, ewm=False, **kwargs):
     else:
         res = np.sqrt((a + b).rolling(**kwargs).mean())
 
-    return np.sqrt(252) * res
+    return res
 
 
 def _vol_yz(price_df: pd.DataFrame, ewm=False, **kwargs):
     price_df["CLOSE_PREV"] = price_df.CLOSE.shift(1)
 
-    rs_vol = _vol_rs(price_df, ewm, **kwargs) / np.sqrt(252)
+    rs_vol = _vol_rs(price_df, ewm, **kwargs)
     rs_var = rs_vol*rs_vol
 
     if ewm:
@@ -80,7 +111,7 @@ def _vol_yz(price_df: pd.DataFrame, ewm=False, **kwargs):
 
     k = 0.34 / (1.34 + (window+1)/(window-1))
 
-    return np.sqrt(252) * np.sqrt(overnight_var + k*open_close_var + (1-k)*rs_var)
+    return np.sqrt(overnight_var + k*open_close_var + (1-k)*rs_var)
 
 
 def summary(df: pd.DataFrame, **kwargs):

@@ -131,12 +131,12 @@ class Future:
 
         return df, adj
 
-    def vol_standardised_close_price(self):
+    def daily_vol(self):
         adj_dates = self.get_adj_dates(n_day=-1)
         ohlcv, _ = self.ohlcv(adj_dates=adj_dates, method='panama')
-        vol = hydrogen.analytics.vol(ohlcv, method='YZ', window=22)
+        vol = hydrogen.analytics.vol(ohlcv, method='YZ', window=21, price_scale=False, annualised=False)
 
-        return ohlcv.CLOSE/vol
+        return vol
 
     def ewma_price(self, **kwargs):
         adj_dates = self.get_adj_dates(n_day=-1)
