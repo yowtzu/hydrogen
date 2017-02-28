@@ -146,15 +146,14 @@ class Future:
 
     def carry(self):
         front_adj_dates = self.get_adj_dates(n_day=-1)
-        front = self.close_price(front_adj_dates, method = 'no_adj')
+        front = self.ohlcv(front_adj_dates, method = 'no_adj')[0].CLOSE
 
-        back_adj_dates = front_adj_dates.copy()
-        back_adj_dates.TICKER = back_adj_dates.DATE.NEXT_TICKER
-        back = self.close_price(back_adj_dates, method = 'no_adj')
+        back_adj_dates = front_adj_dates.copy()[:-1]
+        back_adj_dates.TICKER = back_adj_dates.NEXT_TICKER
+        back = self.ohlcv(back_adj_dates, method = 'no_adj')[0].CLOSE
 
-        n_day_btw_contracts = front_adj_dates.index.diff().mean()
-
-        return (back - front) / n_day_btw_contracts
+        n_day_btw_contracts = front_adj_dates.END_DATE[front_adj_dates.END_DATE > front.index[-1]][:2].diff().iloc[1].days
+        return (back - front)
 
     def term_structure(self):
         adj_dates = self.get_adj_dates(n_day=-1)

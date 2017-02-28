@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG_FILE_NAME = os.path.join(settings.PROJECT_ROOT, 'data\config.csv')
 
-FX_ROOT_TICKERS = ['MXNUSD']
+FX_ROOT_TICKERS = ['EURUSD', 'GBPUSD', 'CHFUSD', 'CADUSD', 'AUDUSD', 'NZDUSD', 'KRWUSD', 'JPYUSD', 'MXNUSD']
 FX_FUTURE_SPOT_TICKERS = [ticker_root + ' Curncy' for ticker_root in FX_ROOT_TICKERS]
 df_fx = pd.DataFrame({'ROOT_TICKER':FX_FUTURE_SPOT_TICKERS, 'TICKER': FX_FUTURE_SPOT_TICKERS})
 
