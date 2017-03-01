@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class FX:
     _STATIC_FULL_PATH = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
     _OHLCV_PATH = os.path.join(settings.PROJECT_ROOT, 'data\ohlcv')
-    _bbg_field_map = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME'}
+    _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME'}
 
     def __init__(self, ticker: str, as_of_date=pd.datetime.today()):
         self.ticker = ticker
@@ -26,7 +26,7 @@ class FX:
 
         filename = os.path.join(Future._OHLCV_PATH, self.ticker + '.csv')
         if os.path.exists(filename):
-            ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._bbg_field_map)
+            ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
             ohlcv_df = ohlcv_df[start_date:end_date]
             # only see data up to t-1 from as of date (inclusively)
@@ -40,8 +40,8 @@ class FX:
 class Future:
     _STATIC_FULL_PATH = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
     _OHLCV_PATH = os.path.join(settings.PROJECT_ROOT, 'data\ohlcv')
-    _bbg_field_map = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME',
-                      'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST',}
+    _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME',
+                      'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST', }
 
     def __init__(self, ticker: str, as_of_date=pd.datetime.today()):
         self.as_of_date = as_of_date
@@ -50,13 +50,22 @@ class Future:
         self.cont_size = self.static_df.FUT_CONT_SIZE.values[0]
         self.tick_size = self.static_df.FUT_TICK_SIZE.values[0]
 
-        # self.ohlcv = self._read_daily_csv()
-        # self.ohlcv_adj = self.roll_adj(self.ohlcv, method='panama',  adj_values=False)
+        self.adj_dates = self.get_adj_dates(n_day=0)
+        self.ohlcv_unadjusted_df = self.ohlcv(self.adj_dates, method='no_adj')[0]
+        self.ohlcv_df = self.ohlcv(self.adj_dates, method='panama')[0]
+
+        back_adj_dates = self.adj_dates.copy()[:-1]
+        back_adj_dates.TICKER = back_adj_dates.NEXT_TICKER
+        self.back_ohlcv_df = self.ohlcv(back_adj_dates, method='no_adj')[0]
+
+        self.vol = hydrogen.analytics.vol(self.ohlcv_df, method='YZ', window=63, price_scale=True, annualised=False)
+
+        self.n_day_btw_contracts = self.adj_dates.END_DATE[self.adj_dates.END_DATE > self.ohlcv_df.index[-1]][:2].diff().iloc[1].days
 
     def _resolve_ticker(self, ticker: str):
         prefix, suffix = ticker.rsplit(" ", maxsplit=1)
         regexp_double_digit = re.compile(r'[0-1][0-9]')
-        # if it is format like ES01 Index
+        # if it is format like ESH13 Index
         if regexp_double_digit.search(prefix[-2:]):
             return ticker
         else:
@@ -67,7 +76,7 @@ class Future:
         return self.static_df.TICKER.values.copy()
 
     def _read_static_csv(self, ticker_patterns):
-        static_df = pd.read_csv(Future._STATIC_FULL_PATH).rename(columns=self._bbg_field_map)
+        static_df = pd.read_csv(Future._STATIC_FULL_PATH).rename(columns=self._BBG_FIELD_MAP)
         static_df.FUT_NOTICE_FIRST = pd.to_datetime(static_df.FUT_NOTICE_FIRST)
         static_df = static_df[static_df.TICKER.str.contains(ticker_patterns)]
         static_df = static_df.sort_values(by='FUT_NOTICE_FIRST')
@@ -79,7 +88,7 @@ class Future:
 
         filename = os.path.join(Future._OHLCV_PATH, ticker + '.csv')
         if os.path.exists(filename):
-            ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._bbg_field_map)
+            ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
             ohlcv_df = ohlcv_df[start_date:end_date]
             # only see data up to t-1 from as of date (inclusively)
@@ -131,29 +140,9 @@ class Future:
 
         return df, adj
 
-    def daily_vol(self):
-        adj_dates = self.get_adj_dates(n_day=-1)
-        ohlcv, _ = self.ohlcv(adj_dates=adj_dates, method='panama')
-        vol = hydrogen.analytics.vol(ohlcv, method='YZ', window=21, price_scale=False, annualised=False)
-
-        return vol
-
-    def ewma_price(self, **kwargs):
-        adj_dates = self.get_adj_dates(n_day=-1)
-        ohlcv, _ = self.ohlcv(adj_dates=adj_dates, method='panama')
-
-        return ohlcv.CLOSE.ewm(**kwargs).mean()
-
-    def carry(self):
-        front_adj_dates = self.get_adj_dates(n_day=-1)
-        front = self.ohlcv(front_adj_dates, method = 'no_adj')[0].CLOSE
-
-        back_adj_dates = front_adj_dates.copy()[:-1]
-        back_adj_dates.TICKER = back_adj_dates.NEXT_TICKER
-        back = self.ohlcv(back_adj_dates, method = 'no_adj')[0].CLOSE
-
-        n_day_btw_contracts = front_adj_dates.END_DATE[front_adj_dates.END_DATE > front.index[-1]][:2].diff().iloc[1].days
-        return (back - front)
+    def daily_ann_roll(self):
+        res = (self.back_ohlcv_df - self.ohlcv_unadjusted_df) / self.n_day_btw_contracts
+        return res
 
     def term_structure(self):
         adj_dates = self.get_adj_dates(n_day=-1)

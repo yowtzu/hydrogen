@@ -2,18 +2,18 @@ from hydrogen.instrument import Future
 import matplotlib.pyplot as plt
 import hydrogen.analytics
 import hydrogen.trading_rules
+import seaborn as sns
+import numpy as np
+import pandas as pd
 
-VOL_WINDOW_SIZE= 21
+cl1 = Future('CL1 Comdty')
 
-cl1 = Future('JPY 1 Index')
-ohlcv = cl1.ohlcv(cl1.get_adj_dates(-1), method='panama')[0]
-plt.plot(ohlcv["2013":"20141125"].CLOSE)
+hydrogen.trading_rules.EWMAC(cl1).plot()
+hydrogen.trading_rules.carry(cl1, span=63).plot()
+hydrogen.trading_rules.breakout(cl1, window=20, span=10).plot()
+hydrogen.trading_rules.long_only(cl1).plot()
 
-bla = hydrogen.analytics.vol(ohlcv, method='YZ', window=VOL_WINDOW_SIZE)
+cl1 = Future('CL1 Comdty', as_of_date='20140801')
 
-ohlcv.CLOSE["20080701":"20090701"].plot()
-ohlcv.CLOSE.ewm(span=16).mean()["20080701":"20090701"].plot()
-ohlcv.CLOSE.ewm(span=64).mean()["20080701":"20090701"].plot()
+xx = pd.concat([cl1.ohlcv_unadjusted_df.CLOSE, cl1.back_ohlcv_df.CLOSE], axis=1)['20080701':'20111201']
 
-cl1.carry().plot()
-hydrogen.trading_rules.MACD(ohlcv.CLOSE, 16, 32)["20080701":"20090701"].plot()

@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
+import hydrogen.analytics
 
-
-def MACD(price: pd.DataFrame, vol: pd.DataFrame, short_window=32, long_window=128):
+def EWMAC(instrument: hydrogen.instrument.Future, fast_slow_span_pair=[(2, 8), (4, 16), (8, 32), (16, 34), (32, 128), (62, 256)]):
     """
     :param price: the price level time series
     :type price: pd.DataFrame
@@ -19,11 +19,18 @@ def MACD(price: pd.DataFrame, vol: pd.DataFrame, short_window=32, long_window=12
     :return forecast time series
     :rtype pd.DataFrame
     """
+    ts_list = [ (instrument.ohlcv_df.CLOSE.ewm(span=fast_span).mean() - instrument.ohlcv_df.CLOSE.ewm(span=slow_span).mean()) / instrument.vol for fast_span, slow_span in fast_slow_span_pair ]
+    df = pd.concat(ts_list, axis=1)
+    df.columns = ['EWMAC_' + str(x) + '_' + str(y) for x, y in fast_slow_span_pair ]
+    return df
 
-    return (price.ewm(span=short_window).mean() - price.ewm(span=long_window).mean()) / vol
+def carry(instrument: hydrogen.instrument.Future, span=63):
 
+    ts = instrument.daily_ann_roll().CLOSE / instrument.vol
+    smooth_ts = ts.ewm(span = span).mean()
+    return smooth_ts.to_frame('carry')
 
-def breakout(price: pd.DataFrame, window: int, span: int = None):
+def breakout(instrument: hydrogen.instrument.Future, window: int, span: int = None):
     """
     :param price: the price level time series
     :type price: pd.DataFrame
@@ -47,16 +54,17 @@ def breakout(price: pd.DataFrame, window: int, span: int = None):
 
     min_periods = np.ceil(span / 2.0)
 
+    price = instrument.ohlcv_df.CLOSE
     roll_max = price.rolling(window=window).max()
     roll_min = price.rolling(window=window).min()
     roll_mean = 0.5 * (roll_max + roll_min)
     forecast = 40.0 * ((price - roll_mean) / (roll_max - roll_min))
     smooth_forecast = forecast.ewm(span=span, min_periods=min_periods).mean()
 
-    return smooth_forecast
+    return smooth_forecast.to_frame('breakout')
 
 
-def long_only(price: pd.DataFrame, short_only: bool = False):
+def long_only(instrument: hydrogen.instrument.Future):
     """
     Long or short only
 
@@ -70,7 +78,8 @@ def long_only(price: pd.DataFrame, short_only: bool = False):
     :rtype pd.DataFrame
     """
 
+    price = instrument.ohlcv_df.CLOSE
     avg_abs_forecast = price.copy()
-    avg_abs_forecast[:] = -10.0 if short_only else 10.0
+    avg_abs_forecast[:] = 10.0
 
-    return avg_abs_forecast
+    return avg_abs_forecast.to_frame('long_only')
