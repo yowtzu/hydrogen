@@ -10,16 +10,28 @@ import hydrogen.analytics
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-class FX:
+class InstrumentFactory():
+    def create_instrument(self, ticker:str):
+        prefix, suffix = ticker.rsplit(" ", maxsplit=1)
+        class_map = {"Curncy": FX,
+                     "Comdty": Future,
+                     "Index": Future,
+                     }
+        return class_map[suffix](ticker)
+
+class Instrument:
+
+    def __init__(self, ticker: str, as_of_date):
+        self.ticker = ticker
+        self.as_of_date = as_of_date
+
+    def __repr__(self):
+        return str(self.__class__) + ":" + self.ticker + " as of " + str(self.as_of_date)
+
+class FX(Instrument):
     _STATIC_FULL_PATH = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
     _OHLCV_PATH = os.path.join(settings.PROJECT_ROOT, 'data\ohlcv')
     _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME'}
-
-    def __init__(self, ticker: str, as_of_date=pd.datetime.today()):
-        self.ticker = ticker
-        self.as_of_date = as_of_date
-        self.cont_size = self.static_df.FUT_CONT_SIZE.unique()
-        self.tick_size = self.static_df.FUT_TICK_SIZE.unique()
 
     def _read_ohlcv(self, start_date, end_date):
         ohlcv_df = pd.DataFrame()
@@ -37,14 +49,14 @@ class FX:
     def close_price(self):
         return self._read_ohlcv.CLOSE
 
-class Future:
+class Future(Instrument):
     _STATIC_FULL_PATH = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
     _OHLCV_PATH = os.path.join(settings.PROJECT_ROOT, 'data\ohlcv')
     _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME',
                       'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST', }
 
-    def __init__(self, ticker: str, as_of_date=pd.datetime.today()):
-        self.as_of_date = as_of_date
+    def __init__(self, ticker: str, as_of_date=pd.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)):
+        super().__init__(ticker, as_of_date)
         self._ticker_pattern = self._resolve_ticker(ticker)
         self.static_df = self._read_static_csv(self._ticker_pattern)
         self.cont_size = self.static_df.FUT_CONT_SIZE.values[0]
