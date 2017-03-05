@@ -26,7 +26,7 @@ def EWMAC(instrument: hydrogen.instrument.Future, fast_slow_span_pair=[(2, 8), (
 
 def carry(instrument: hydrogen.instrument.Future, span=63):
 
-    ts = instrument.daily_ann_roll().CLOSE / instrument.vol
+    ts = instrument._calc_daily_yield().CLOSE / instrument.vol
     smooth_ts = ts.ewm(span = span).mean()
     return smooth_ts.to_frame('carry')
 

@@ -1,6 +1,6 @@
 import unittest
 import logging
-from hydrogen.instrument import Future
+from hydrogen.instrument import InstrumentFactory
 import pandas as pd
 import numpy as np
 from pandas.util.testing import assert_frame_equal
@@ -23,8 +23,9 @@ class AnalyticsTest(unittest.TestCase):
     def setUp(self):
         future_Z_1_Index_ticker = "Z 1 Index"
         as_of_date = pd.datetime(year=2010, month=3, day=21)
-        future_Z_1_Index = Future(future_Z_1_Index_ticker, as_of_date=as_of_date)
-        self.ohlcv, adj = future_Z_1_Index.ohlcv(future_Z_1_Index.get_adj_dates(n_day=-1), method='no_adj')
+        instrument_factory = InstrumentFactory()
+        future_Z_1_Index = instrument_factory.create_instrument(future_Z_1_Index_ticker, as_of_date=as_of_date)
+        self.ohlcv = future_Z_1_Index.ohlcv
         pass
 
     def tearDown(self):
