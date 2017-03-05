@@ -110,6 +110,7 @@ class Future(Instrument):
 
         # self._exact_contract, self._ticker_pattern = self._resolve_ticker(ticker)
         #logger.debug('Ticker pattern: {}'.format(self._ticker_pattern))
+
         read_multiple_files, self._static_df = self._read_static_csv(self._ticker)
 
         logger.debug(self._static_df)
@@ -117,15 +118,13 @@ class Future(Instrument):
         self._tick_size = self._static_df.FUT_TICK_SIZE.values[0]
         self._ccy = self._static_df.CRNCY.values[0]
 
+        self._adj_dates = self._get_adj_dates(n_day=-1)
+
         if not read_multiple_files:
-            self._adj_dates = self._get_adj_dates(n_day=-1)
-            logger.debug(self._adj_dates)
             self._unadjusted_ohlcv_df = self._read_ohlcv(self._static_df.TICKER.iloc[0], self._adj_dates.START_DATE.iloc[0], self._adj_dates.END_DATE.iloc[0])
             self._ohlcv_df = self.unadjusted_ohlcv
-            self.n_day_btw_contracts = np.nan
 
         else:
-            self._adj_dates = self._get_adj_dates(n_day=-1)
             self._unadjusted_ohlcv_df = self._calc_ohlcv(self._adj_dates, method='no_adj')[0]
             self._ohlcv_df, self._adj = self._calc_ohlcv(self._adj_dates, method='panama')
 
