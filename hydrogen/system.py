@@ -1,13 +1,14 @@
 import yaml
 import logging
 import numpy as np
-import settings
 import os, sys
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-cfg_filename = os.path.join(settings.PROJECT_ROOT, 'hydrogen\config.yml')
+project_path = os.path.abspath(os.path.dirname(__file__))
+logger.debug(project_path)
+cfg_filename = os.path.join(project_path, 'config.yml')
 logger.debug(cfg_filename)
 
 with open(cfg_filename) as ymlfile:

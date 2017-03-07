@@ -1,18 +1,17 @@
 import logging
-import numpy as np
 import pandas as pd
 import os
-import re
-import settings
+import hydrogen.system as system
 from pandas.tseries.offsets import BDay
 import hydrogen.analytics
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-class InstrumentFactory():
-    def create_instrument(self, ticker:str, as_of_date=pd.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)):
 
+class InstrumentFactory():
+    def create_instrument(self, ticker: str,
+                          as_of_date=pd.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)):
         prefix, suffix = ticker.rsplit(" ", maxsplit=1)
         class_map = {"Curncy": FX,
                      "Comdty": Future,
@@ -20,9 +19,10 @@ class InstrumentFactory():
                      }
         return class_map[suffix](ticker, as_of_date)
 
+
 class Instrument:
-    _STATIC_FULL_PATH = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
-    _OHLCV_PATH = os.path.join(settings.PROJECT_ROOT, 'data\ohlcv')
+    _STATIC_FULL_PATH = os.path.join(system.project_path, '..\data\static.csv')
+    _OHLCV_PATH = os.path.join(system.project_path, '..\data\ohlcv')
     _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME',
                       'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST', }
 
@@ -81,7 +81,6 @@ class Instrument:
     def price(self):
         return self.ohlcv.CLOSE.to_frame(self._ticker)
 
-
     @property
     def diff(self):
         return self.price.diff(1)
@@ -90,8 +89,8 @@ class Instrument:
     def daily_yield(self):
         return self._calc_daily_yield()
 
-class FX(Instrument):
 
+class FX(Instrument):
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
         self._ccy = None
@@ -116,19 +115,19 @@ class FX(Instrument):
         return ohlcv_df
 
     def _calc_daily_yield(self):
-        return self._cr_ohlcv.CLOSE.pct_change().shift(1) -  self.ohlcv.CLOSE.pct_change().shift(1)
+        return self._cr_ohlcv.CLOSE.pct_change().shift(1) - self.ohlcv.CLOSE.pct_change().shift(1)
+
 
 class Future(Instrument):
-
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
 
         # self._exact_contract, self._ticker_pattern = self._resolve_ticker(ticker)
-        #logger.debug('Ticker pattern: {}'.format(self._ticker_pattern))
+        # logger.debug('Ticker pattern: {}'.format(self._ticker_pattern))
 
         read_multiple_files, self._static_df = self._read_static_csv(self._ticker)
 
-        #logger.debug(self._static_df)
+        # logger.debug(self._static_df)
         self._cont_size = self._static_df.FUT_CONT_SIZE.values[0]
         self._tick_size = self._static_df.FUT_TICK_SIZE.values[0]
         self._ccy = self._static_df.CRNCY.values[0]
@@ -136,7 +135,9 @@ class Future(Instrument):
         self._adj_dates = self._get_adj_dates(n_day=-1)
 
         if not read_multiple_files:
-            self._unadjusted_ohlcv_df = self._read_ohlcv(self._static_df.TICKER.iloc[0], self._adj_dates.START_DATE.iloc[0], self._adj_dates.END_DATE.iloc[0])
+            self._unadjusted_ohlcv_df = self._read_ohlcv(self._static_df.TICKER.iloc[0],
+                                                         self._adj_dates.START_DATE.iloc[0],
+                                                         self._adj_dates.END_DATE.iloc[0])
             self._ohlcv_df = self.unadjusted_ohlcv
 
         else:
@@ -160,7 +161,7 @@ class Future(Instrument):
         roll_dates['NEXT_TICKER'] = roll_dates.TICKER.shift(-1).fillna('')
         return roll_dates
 
-    #def _resolve_ticker(self, ticker: str):
+    # def _resolve_ticker(self, ticker: str):
     #    prefix, suffix = ticker.rsplit(" ", maxsplit=1)
     #    regexp_double_digit = re.compile(r'[0-1][0-9]')
     #    # if it is format like ESH13 Index
@@ -175,7 +176,7 @@ class Future(Instrument):
         static_df = pd.read_csv(Future._STATIC_FULL_PATH).rename(columns=self._BBG_FIELD_MAP)
         static_df.FUT_NOTICE_FIRST = pd.to_datetime(static_df.FUT_NOTICE_FIRST).dt.date
 
-        static_df_filter = static_df[static_df.TICKER==ticker]
+        static_df_filter = static_df[static_df.TICKER == ticker]
         read_multiple_files = False
 
         if static_df_filter.empty:
@@ -198,7 +199,7 @@ class Future(Instrument):
             ohlcv_df = ohlcv_df[start_date:end_date]
             # only see data up to t-1 from as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
-            #ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
+            # ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
             ohlcv_df = ohlcv_df.dropna(axis='index')
         return ohlcv_df
 
@@ -215,10 +216,9 @@ class Future(Instrument):
         close = df.CLOSE
 
         next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.END_DATE, row.END_DATE)
-                         for _, row in adj_dates.iterrows()])
+                             for _, row in adj_dates.iterrows()])
 
         next_close = next_df.CLOSE
-
 
         if method == 'panama':
             adj = (next_close - close.asof(next_close.index))
@@ -235,7 +235,7 @@ class Future(Instrument):
             df.LOW = (df.LOW * adj)
             df.CLOSE = (df.CLOSE * adj)
         elif method == 'no_adj':
-            adj = next_close # to get the data frame shape
+            adj = next_close  # to get the data frame shape
             adj[:] = 0
 
         return df, adj

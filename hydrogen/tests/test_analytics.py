@@ -3,8 +3,6 @@ import logging
 from hydrogen.instrument import InstrumentFactory
 import pandas as pd
 import numpy as np
-from pandas.util.testing import assert_frame_equal
-from numpy.testing import assert_array_equal
 import hydrogen.analytics
 
 logging.basicConfig(level=logging.DEBUG)
