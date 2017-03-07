@@ -1,8 +1,28 @@
 import pandas as pd
 import numpy as np
 import hydrogen.analytics
+from hydrogen.playground.portopt import port_opt
 
-def EWMAC(instrument: hydrogen.instrument.Future, fast_slow_span_pair=[(2, 8), (4, 16), (8, 32), (16, 34), (32, 128), (62, 256)]):
+
+def signal_scalar(signal: pd.DataFrame, target_abs_forecast=10):
+    # cross sectional average
+    if len(signal.columns) == 1:
+        cross_sessional_avg = signal.ix[:, 0].abs()
+    else:
+        cross_sessional_avg = signal.abs().median(axis=1)
+
+    # time series average
+    scaling_factor = target_abs_forecast / cross_sessional_avg.expanding().mean()
+
+    return signal.mul(scaling_factor, axis=1)
+
+def signal_capper(signal: pd.DataFrame, lower_limit=-20, upper_limit=20):
+    return signal.clip(lower=lower_limit, upper=upper_limit)
+
+def signal_mixer(signal: pd.DataFrame):
+    return port_opt(signal, 'bootstrap', 'expanding', use_standardise_vol=True, n_bootstrap_run=1024)
+
+def EWMAC(instrument: hydrogen.instrument.Instrument, fast_slow_span_pair=[(2, 8), (4, 16), (8, 32), (16, 64), (32, 128), (64, 256)]):
     """
     :param price: the price level time series
     :type price: pd.DataFrame
@@ -19,18 +39,21 @@ def EWMAC(instrument: hydrogen.instrument.Future, fast_slow_span_pair=[(2, 8), (
     :return forecast time series
     :rtype pd.DataFrame
     """
-    ts_list = [ (instrument.ohlcv_df.CLOSE.ewm(span=fast_span).mean() - instrument.ohlcv_df.CLOSE.ewm(span=slow_span).mean()) / instrument.vol for fast_span, slow_span in fast_slow_span_pair ]
-    df = pd.concat(ts_list, axis=1)
-    df.columns = ['EWMAC_' + str(x) + '_' + str(y) for x, y in fast_slow_span_pair ]
-    return df
+    ts_list = [ (instrument.ohlcv.CLOSE.ewm(span=fast_span).mean() - instrument.ohlcv.CLOSE.ewm(span=slow_span).mean()) / instrument.price_vol for fast_span, slow_span in fast_slow_span_pair ]
+    signal = pd.concat(ts_list, axis=1)
+    signal.columns = ['EWMAC_' + str(x) + '_' + str(y) for x, y in fast_slow_span_pair ]
 
-def carry(instrument: hydrogen.instrument.Future, span=63):
+    return signal
+
+def carry(instrument: hydrogen.instrument.Instrument, span=63):
 
     ts = instrument._calc_daily_yield().CLOSE / instrument.vol
-    smooth_ts = ts.ewm(span = span).mean()
-    return smooth_ts.to_frame('carry')
+    signal = ts.ewm(span = span).mean().to_frame('carry')
 
-def breakout(instrument: hydrogen.instrument.Future, window: int, span: int = None):
+    return signal
+
+
+def breakout(instrument: hydrogen.instrument.Instrument, window: int, span: int = None):
     """
     :param price: the price level time series
     :type price: pd.DataFrame
@@ -54,7 +77,7 @@ def breakout(instrument: hydrogen.instrument.Future, window: int, span: int = No
 
     min_periods = np.ceil(span / 2.0)
 
-    price = instrument.ohlcv_df.CLOSE
+    price = instrument.ohlcv.CLOSE
     roll_max = price.rolling(window=window).max()
     roll_min = price.rolling(window=window).min()
     roll_mean = 0.5 * (roll_max + roll_min)
@@ -64,7 +87,7 @@ def breakout(instrument: hydrogen.instrument.Future, window: int, span: int = No
     return smooth_forecast.to_frame('breakout')
 
 
-def long_only(instrument: hydrogen.instrument.Future):
+def long_only(instrument: hydrogen.instrument.Instrument):
     """
     Long or short only
 
@@ -78,7 +101,7 @@ def long_only(instrument: hydrogen.instrument.Future):
     :rtype pd.DataFrame
     """
 
-    price = instrument.ohlcv_df.CLOSE
+    price = instrument.ohlcv.CLOSE
     avg_abs_forecast = price.copy()
     avg_abs_forecast[:] = 10.0
 

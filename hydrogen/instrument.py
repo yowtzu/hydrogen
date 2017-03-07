@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class InstrumentFactory():
     def create_instrument(self, ticker:str, as_of_date=pd.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)):
+
         prefix, suffix = ticker.rsplit(" ", maxsplit=1)
         class_map = {"Curncy": FX,
                      "Comdty": Future,
@@ -30,7 +31,7 @@ class Instrument:
         self._as_of_date = as_of_date
 
     def __repr__(self):
-        return str(self.__class__) + ":" + self.ticker + " as of " + str(self.as_of_date)
+        return str(self.__class__) + ":" + self._ticker + " as of " + str(self._as_of_date)
 
     @property
     def ccy(self):
@@ -48,6 +49,7 @@ class Instrument:
     def vol(self):
         return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=63, price_scale=False, annualised=True)
 
+    @property
     def price_vol(self):
         return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=63, price_scale=True, annualised=False)
 
@@ -60,6 +62,10 @@ class Instrument:
         return self._tick_size
 
     @property
+    def block_value(self):
+        0.01 * self.ohlcv.CLOSE * self.cont_size
+
+    @property
     def daily_yield(self):
         return self._calc_daily_yield()
 
@@ -68,35 +74,23 @@ class FX(Instrument):
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
         self._ccy = None
-        self._ohlcv_df = self._read_ohlcv()
+        self._ohlcv_df = self._read_ohlcv(self._ticker)
         self._unadjusted_ohlcv_df = self._ohlcv_df
-        self._cr_ohlcv = self._read_carry_ohlcv()
 
-    def _read_ohlcv(self):
+        prefix, suffix = self._ticker.rsplit(" ", maxsplit=1)
+        carry_ticker = prefix + 'CR ' + suffix
+        self._cr_ohlcv = self._read_ohlcv(carry_ticker)
+
+    def _read_ohlcv(self, filename):
         ohlcv_df = pd.DataFrame()
 
-        filename = os.path.join(Future._OHLCV_PATH, self.ticker + '.csv')
+        filename = os.path.join(Future._OHLCV_PATH, self._ticker + '.csv')
         if os.path.exists(filename):
             ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
 
             # only see data up to t-1 from as of date (inclusively)
-            ohlcv_df = ohlcv_df[:self.as_of_date]
-
-        return ohlcv_df
-
-    def _read_carry_ohlcv(self):
-        ohlcv_df = pd.DataFrame()
-
-        prefix, suffix = self.ticker.rsplit(" ", maxsplit=1)
-        filename = os.path.join(Future._OHLCV_PATH, prefix + 'CR ' + suffix + '.csv')
-
-        if os.path.exists(filename):
-            ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
-            ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
-
-            # only see data up to t-1 from as of date (inclusively)
-            ohlcv_df = ohlcv_df[:self.as_of_date]
+            ohlcv_df = ohlcv_df[:self._as_of_date]
 
         return ohlcv_df
 
@@ -113,7 +107,7 @@ class Future(Instrument):
 
         read_multiple_files, self._static_df = self._read_static_csv(self._ticker)
 
-        logger.debug(self._static_df)
+        #logger.debug(self._static_df)
         self._cont_size = self._static_df.FUT_CONT_SIZE.values[0]
         self._tick_size = self._static_df.FUT_TICK_SIZE.values[0]
         self._ccy = self._static_df.CRNCY.values[0]
@@ -183,8 +177,8 @@ class Future(Instrument):
             ohlcv_df = ohlcv_df[start_date:end_date]
             # only see data up to t-1 from as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
-            ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
-
+            #ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
+            ohlcv_df = ohlcv_df.dropna(axis='index')
         return ohlcv_df
 
     def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama'):
