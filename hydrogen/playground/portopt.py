@@ -41,7 +41,7 @@ def handcrafted_port_opt(return_df, use_standardise_vol=False, annualised_target
         return refs[np.argmin(np.abs(np.repeat(xs.reshape(-1, 1), len(refs), axis=1) - refs), 1)]
 
     def weights_lookup(corr_values):
-        cor_to_weights = pd.read_csv("~/repo/hydrogen/hydrogen/playground/data/cor_to_weights.csv",
+        cor_to_weights = pd.read_csv("~/hydrogen/playground/data/cor_to_weights.csv",
                                      index_col=('c1', 'c2', 'c3'))
         indices = round_to_nearest(corr_values)
         return cor_to_weights.ix[indices[0]].ix[indices[1]].ix[indices[2]].values
@@ -63,11 +63,11 @@ def generate_fitting_period(return_df, data_split_method, n_roll_days=256):
     if data_split_method == 'in_sample':
         df_list = [return_df]
     elif data_split_method == 'rolling':
-        df_list = [daily_df[start_date:end_date] for start_date, end_date
-                   in zip(daily_df.index[:-n_roll_days + 1], daily_df.index[n_roll_days - 1:] )]
+        df_list = [return_df[start_date:end_date] for start_date, end_date
+                   in zip(return_df.index[:-n_roll_days + 1], return_df.index[n_roll_days - 1:] )]
     elif data_split_method == 'expanding':
-        df_list = [daily_df[:end_date] for end_date
-                   in daily_df.index[n_roll_days - 1:]]
+        df_list = [return_df[:end_date] for end_date
+                   in return_df.index[n_roll_days - 1:]]
     else:
         raise Exception(
             'Unregonised data split method: {method}. Supported methods are {supported_method}.'.format(
@@ -129,33 +129,26 @@ def port_opt(return_df, fit_method, data_split_method,  n_roll_days=256, step=22
 
         weights = port_opt_helper(df, **kwargs)
 
-        weights_df = pd.DataFrame(weights.reshape(1, -1), [df.index[-1]], daily_df.columns)
+        weights_df = pd.DataFrame(weights.reshape(1, -1), [df.index[-1]], return_df.columns)
 
         weights_df_list.append(weights_df)
 
     return pd.concat(weights_df_list)
 
-fileName = '~/repo/hydrogen/hydrogen/playground/data/three_assets.csv'
 
-daily_df = pd.read_csv(fileName, index_col=['date'], parse_dates=['date'])
-daily_df = daily_df.fillna(0)
+if __name__=='__main__':
+    fileName = './hydrogen/playground/data/three_assets.csv'
 
-## Down-sample to weekly
-weekly_df = daily_df.resample('1W').sum().diff()
+    daily_df = pd.read_csv(fileName, index_col=['date'], parse_dates=['date'])
+    daily_df = daily_df.fillna(0)#
 
-res = port_opt(daily_df, 'one_period', 'in_sample')
-
-res1 = port_opt(daily_df, 'one_period', 'in_sample', use_standardise_vol=True)
-
-res2 = port_opt(daily_df, 'one_period', 'in_sample', use_equal_means=True, use_standardise_vol=True)
-
-#####
-res3 = port_opt(daily_df, 'bootstrap', 'in_sample', use_standardise_vol=True , n_bootstrap_run=1024)
-
-res4 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True)
-
-res5 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True, n_roll_days=256*5)
-
-res6 = port_opt(daily_df, 'one_period', 'expanding', use_standardise_vol=True)
-
-res7 = port_opt(daily_df, 'bootstrap', 'expanding', use_standardise_vol=True, n_bootstrap_run=1024)
+    ## Down-sample to weekly
+    weekly_df = daily_df.resample('1W').sum().diff()
+    res = port_opt(daily_df, 'one_period', 'in_sample')
+    res1 = port_opt(daily_df, 'one_period', 'in_sample', use_standardise_vol=True)
+    res2 = port_opt(daily_df, 'one_period', 'in_sample', use_equal_means=True, use_standardise_vol=True)
+    res3 = port_opt(daily_df, 'bootstrap', 'in_sample', use_standardise_vol=True , n_bootstrap_run=1024)
+    res4 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True)
+    res5 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True, n_roll_days=256*5)
+    res6 = port_opt(daily_df, 'one_period', 'expanding', use_standardise_vol=True)
+    res7 = port_opt(daily_df, 'bootstrap', 'expanding', use_standardise_vol=True, n_bootstrap_run=1024)
