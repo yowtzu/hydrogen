@@ -1,9 +1,9 @@
 system:
   trading_capital: 1000000
-  volatility_target_pct: 0.2 # see page 147 for setting
+  vol_target_pct: 0.2 # see page 147 for setting
 
   n_day_in_year: 365.25
-  n_bdays_in_year: 252.0
+  n_bday_in_year: 256.0
   n_month_in_year: 12.0
 
   epoch: 2005-01-01

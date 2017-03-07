@@ -1,69 +1,21 @@
 import yaml
 import logging
 import numpy as np
+import settings
+import os, sys
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-class System():
+cfg_filename = os.path.join(settings.PROJECT_ROOT, 'hydrogen\config.yml')
+logger.debug(cfg_filename)
 
-    @property
-    def n_day_in_year(self):
-        return self._cfg["n_day_in_year"]
+with open(cfg_filename) as ymlfile:
+    cfg = yaml.load(ymlfile)["system"]
+    [ setattr(sys.modules[__name__], k, v) for k, v in cfg.items() ]
 
-    @property
-    def root_n_day_in_year(self):
-        return np.sqrt(self.n_day_in_year)
-
-    @property
-    def n_bdays_in_year(self):
-        return self._cfg["n_bdays_in_year"]
-
-    @property
-    def root_n_bdays_in_year(self):
-        np.sqrt(self.n_bdays_in_year)
-
-    @property
-    def n_month_in_year(self):
-        return self._cfg["n_month_in_year"]
-
-    @property
-    def root_n_date_in_year(self):
-            np.sqrt(self.n_date_in_year)
-
-    @property
-    def n_week_in_year(self):
-        return self.n_day_in_year / 7.0
-
-    @property
-    def root_n_week_in_year(self):
-            np.sqrt(self.n_week_in_year)
-
-    @property
-    def epoch(self):
-        return self._cfg['epoch']
-
-    @property
-    def trading_capital(self):
-        return self._cfg["trading_capital"]
-
-    @property
-    def vol_target_pct(self):
-        return self._cfg["volatility_target_pct"]
-
-    @property
-    def vol_target_cash_daily(self):
-        return self.trading_capital * self.vol_target_pct
-
-    @property
-    def vol_target_cash_annualised(self):
-        return self.vol_target_cash_daily * self.root_n_date_in_year
-
-    def __init__(self, filename='hydrogen/config.yml'):
-        self._read_config_file(filename)
-
-    def _read_config_file(self, filename):
-        with open(filename) as ymlfile:
-            self._cfg = yaml.load(ymlfile)['system']
-        logging.debug(self._cfg)
-
+root_n_day_in_year = np.sqrt(n_day_in_year)
+root_n_bday_in_year = np.sqrt(n_bday_in_year)
+n_week_in_year = n_day_in_year / 7.0
+vol_target_cash_annual = trading_capital * vol_target_pct
+vol_target_cash_daily = vol_target_cash_annual / root_n_bday_in_year
