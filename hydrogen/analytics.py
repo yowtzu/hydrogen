@@ -129,3 +129,28 @@ def summary(df: pd.DataFrame, **kwargs):
 
     return stats.append(median).append(skew).append(kurtosis), corr
 
+def pnl():
+    pass
+
+def combine_forecast(forecast: pd.DataFrame):
+    combined_forecast = pd.DataFrame()
+
+    return combined_forecast
+
+
+BACK_TESTED_SR_DAILY = 1.0
+
+
+def combined_forecast_to_position(inst: hydrogen.instrument.Instrument,
+                                  combined_forecast: pd.DataFrame,
+                                  trading_capital=10000000,
+                                  vol_target_pct = BACK_TESTED_SR_DAILY/4,
+                                  average_abs_forecast = 10
+                                  ):
+
+    vol_target_cash_annual = trading_capital * vol_target_pct
+    daily_vol_target_cash_daily = vol_target_cash_annual / 16
+
+    volatility_scalar = daily_vol_target_cash_daily / inst.instrument_value_vol
+
+    return combined_forecast * volatility_scalar / average_abs_forecast

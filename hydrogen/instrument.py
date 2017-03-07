@@ -66,6 +66,18 @@ class Instrument:
         0.01 * self.ohlcv.CLOSE * self.cont_size
 
     @property
+    def instrument_currency_vol(self):
+        self.block_value * self.price_vol
+
+    @property
+    def fx(self):
+        self._fx
+
+    @property
+    def instrument_value_vol(self):
+        self.instrument_currency_vol * self.fx
+
+    @property
     def daily_yield(self):
         return self._calc_daily_yield()
 
