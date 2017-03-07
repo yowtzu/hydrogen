@@ -137,7 +137,7 @@ def port_opt(return_df, fit_method, data_split_method,  n_roll_days=256, step=22
 
 
 if __name__=='__main__':
-    fileName = './hydrogen/playground/data/three_assets.csv'
+    fileName = 'hydrogen/tests/data/three_assets.csv'
 
     daily_df = pd.read_csv(fileName, index_col=['date'], parse_dates=['date'])
     daily_df = daily_df.fillna(0)#

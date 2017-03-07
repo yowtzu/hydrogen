@@ -42,6 +42,9 @@ class AnalyticsTest(unittest.TestCase):
     def test_adj(self):
         pass
 
+    def test_combined_forecast_to_position(self):
+        pass
+
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')

@@ -63,19 +63,28 @@ class Instrument:
 
     @property
     def block_value(self):
-        0.01 * self.ohlcv.CLOSE * self.cont_size
+        return 0.01 * self.ohlcv.CLOSE * self.cont_size
 
     @property
     def instrument_currency_vol(self):
-        self.block_value * self.price_vol
+        return self.block_value * self.price_vol
 
     @property
     def fx(self):
-        self._fx
+        return self._fx
 
     @property
     def instrument_value_vol(self):
-        self.instrument_currency_vol * self.fx
+        return self.instrument_currency_vol * self.fx
+
+    @property
+    def price(self):
+        return self.ohlcv.CLOSE.to_frame(self._ticker)
+
+
+    @property
+    def diff(self):
+        return self.price.diff(1)
 
     @property
     def daily_yield(self):

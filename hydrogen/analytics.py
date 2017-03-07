@@ -129,19 +129,12 @@ def summary(df: pd.DataFrame, **kwargs):
 
     return stats.append(median).append(skew).append(kurtosis), corr
 
-def pnl():
-    pass
 
-def combine_forecast(forecast: pd.DataFrame):
-    combined_forecast = pd.DataFrame()
-
-    return combined_forecast
-
+#####
 
 BACK_TESTED_SR_DAILY = 1.0
 
-
-def combined_forecast_to_position(inst: hydrogen.instrument.Instrument,
+def forecast_to_position(inst: hydrogen.instrument.Instrument,
                                   combined_forecast: pd.DataFrame,
                                   trading_capital=10000000,
                                   vol_target_pct = BACK_TESTED_SR_DAILY/4,
@@ -154,3 +147,41 @@ def combined_forecast_to_position(inst: hydrogen.instrument.Instrument,
     volatility_scalar = daily_vol_target_cash_daily / inst.instrument_value_vol
 
     return combined_forecast * volatility_scalar / average_abs_forecast
+
+def pnl_single_forecast(inst: hydrogen.instrument.Instrument,
+        forecast: pd.DataFrame):
+    ''' forecast is single column,
+        but always return signle column dataframe
+    '''
+    position = forecast_to_position(inst, forecast)
+
+    return inst.diff * inst.fx * position
+
+def combine_forecast(forecast: pd.DataFrame):
+    if len(forecast.columns) == 1:
+        return 1, 1, forecast
+    else:
+        combined_forecast = pd.DataFrame()
+        pnl = forecast.apply(pnl_single_forecast, axis='column')
+        # portfolio optimisation
+        weight = portfolio_opt(pnl)
+
+        scaling_factor = 1 / weight.dot(pnl).weight
+        scaled_combined_forecast = scaling_factor * weight * scaling_factor
+        return weight, scaling_factor, scaled_combined_forecast
+
+def pnl_multiple_forecast(inst: hydrogen.instrument.Instrument,
+        forecast: pd.DataFrame):
+    ''' forecast can be multiple columns,
+        but always return signle column dataframe
+    '''
+    _, _, forecast = combine_forecast(forecast)
+    positions = forecast_to_position(inst, forecast)
+
+    return inst.diff * inst.fx * positions
+
+def position_to_portfolio(inst_list, combined_forecast_list):
+    portfolio = pd.DataFrame()
+    # optimisation
+    # portfolio optimisation again
+    return portfolio
