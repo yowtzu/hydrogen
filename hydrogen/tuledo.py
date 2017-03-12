@@ -1,61 +1,95 @@
 import matplotlib.pyplot as plt
-import hydrogen.analytics
+import hydrogen.system as system
 import seaborn as sns
 import numpy as np
 import pandas as pd
-
-from hydrogen.instrument import Future, InstrumentFactory
+from hydrogen.instrument import Future, InstrumentFactory, Instrument
 from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_capper, signal_scalar
 
-
-
-TICKERS = ["ED1 Comdty", "FV1 Comdty", "VG1 Comdty", "FVS1 Index", "MXNUSD Curncy", "C 1 Comdty"]
-#TICKERS = ["VG1 Comdty"]
+TICKERS = ["TY1 Comdty", "FV1 Comdty", "VG1 Comdty", "FVS1 Index", "MXNUSD Curncy", "C 1 Comdty"]
 
 instrument_factory = InstrumentFactory()
 
-instruments = { ticker:instrument_factory.create_instrument(ticker, as_of_date='20151230') for ticker in TICKERS }
+instruments = { ticker:instrument_factory.create_instrument(ticker, as_of_date='20161111') for ticker in TICKERS }
 
 inst = instruments["C 1 Comdty"]
 
-signal = EWMAC(inst)
-signal
-res = signal_mixer(signal)
-res
-inst.ohlcv["20060401":]
+
+def forecast_to_position(inst: Instrument, forecast: pd.Series):
+    volatility_scalar = system.vol_target_cash_daily / inst.instrument_value_vol
+    return forecast * volatility_scalar / system.avg_abs_forecast
+
+rules = [ (EWMAC, {"fast_span": 2, "slow_span": 8} ) ,
+          (EWMAC, {"fast_span": 4, "slow_span": 16} ) ,
+          (EWMAC, {"fast_span": 8, "slow_span": 32} ) ,
+          (EWMAC, {"fast_span": 16, "slow_span": 64} ) ,
+          (EWMAC, {"fast_span": 32, "slow_span": 128}),
+          (EWMAC, {"fast_span": 64, "slow_span": 256}),
+          (carry, {})]
+
+forecasts = [ signal_scalar(rule(inst, **kargs)) for rule, kargs in rules ]
+(forecasts[6]/9).plot()
+
+inst._adj_dates
+inst.ohlcv
+import hydrogen.analytics
+import hydrogen.system as s
+inst._adj_dates
+inst._back_ohlcv_df.CLOSE
+pd.concat([inst._unadjusted_ohlcv.CLOSE, inst._back_ohlcv_df.CLOSE], axis=1)
+((inst._back_ohlcv_df.CLOSE-inst._unadjusted_ohlcv.CLOSE).ewm(22).mean()*0.25).plot()
+inst._back_ohlcv_df.CLOSE.plot()
+
+inst._back_ohlcv_df.CLOSE
+inst._adj_dates
+    ohlcv.CLOSE.plot()
+
+((inst.ohlcv.CLOSE.ewm(span=64).mean() - inst.ohlcv.CLOSE.ewm(span=256).mean())/hydrogen.analytics.vol(inst.ohlcv, method='YZ', window=63, price_scale=True, annualised=False)).plot()
+pnls = forecasts
+#positions = [ forecast_to_position(inst, forecast) for forecast in forecasts ]
+(forecasts[6])['2008-01-01':].plot()
+def position_to_return(inst: Instrument, position: pd.Series):
+    return position.shift(1) * inst.ohlcv.CLOSE.diff(1)
+
+pnls = [ position_to_return(inst, position) for position in positions ]
+daily_df = pd.concat(pnls, axis=1)
+daily_df.plot()
+
+from hydrogen.portopt import port_opt
+weights = port_opt(daily_df, 'bootstrap', 'expanding')
+weights.plot()
+
+weights_filled = weights.asof(daily_df.index)
+portfolio_pnl = (weights_filled * daily_df).sum(axis=1)
+portfolio_pnl.cumsum().plot()
 
 
-x = signal["EWMAC_32_128"].to_frame()
-x[400:].plot()
-x
-scale_signal(x)
-x.mul(scale_signal(x), axis=0)[400:].plot()
-    .plot()
-scale_signal(signal["EWMAC_32_128"].to_frame().iloc[:, 300:]).plot()
-s = carry(inst)
+diversification_multiplier = pd.Series(np.diag(1/np.array(weights_filled).dot(daily_df.corr()).dot(np.array(weights_filled.T))), index=weights_filled.index)
 
-signal[2006:3000].plot()
-(s/s.ewm(span=63).std())[300:].plot()
-s.abs().median()
-plt.plot(inst.ohlcv.CLOSE)
-s.plot()
-s = carry(inst)
-s.mean()
-s.hist()
+combined = weights_filled.mul(diversification_multiplier, axis=0)*pd.concat(forecasts, axis=1)
+combined_forecast = combined.sum(axis=1)
+
+combined_position = forecast_to_position(inst, combined_forecast)
+
+pnl= position_to_return(inst, combined_position)
+pnl.cumsum().plot()
+
+# now I need to it for many instruments
+
+# then portfolio optimisation
+
+# then including cost
+
+#########################################
+pnl.cumsum().plot()
+
+##############################################################
+
+##############################################################
+
 signal[:"20151211"].plot()
 ewmac8 = signal.ix[:,1].to_frame()
 ewmac8.ewm(span=63).std()
-
-b = ((ewmac8)/ewmac8.ewm(span=63).std())
-b
-10/b.abs().median()
-[300:700].plot()
-ewmac8.plot()
-scale_signal(ewmac8)
-plt.plot(ewmac8)
-bla = ( (inst.ohlcv.CLOSE.ewm(span=8).mean() - inst.ohlcv.CLOSE.ewm(span=32).mean())/ inst.ohlcv.CLOSE.pct_change().ewm(span=25).std()  ) / inst.ohlcv.CLOSE
-bla[:"20151211"]
-scale_signal(ewmac8).ix[:"20151211"]
 
 ewmac8.plot()
 inst.ohlcv
@@ -76,6 +110,3 @@ breakout(inst, window=50, span=20).median()
 long_only(inst).plot()
 
 print(inst.ccy)
-
-
-def si

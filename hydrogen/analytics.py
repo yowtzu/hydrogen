@@ -17,7 +17,7 @@ def nearest_date_before(dates: pd.Series, pivot_date: pd.tslib.Timestamp):
     return res.iloc[-1] if not res.empty else None
 
 
-def vol(price_df: pd.DataFrame, method: str = 'YZ', price_scale=True, annualised=False, **kwargs) -> pd.TimeSeries:
+def vol(price_df: pd.DataFrame, price_scale, annualised,  method: str = 'YZ', **kwargs) -> pd.TimeSeries:
     """
 
     Args:
@@ -118,6 +118,9 @@ def summary(df: pd.DataFrame, **kwargs):
 
     return stats.append(median).append(skew).append(kurtosis), corr
 
+def to_usd(price:pd.DataFrame, ccy:str):
+    # TODO
+    return price
 
 #####
 #

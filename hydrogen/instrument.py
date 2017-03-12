@@ -19,10 +19,8 @@ class InstrumentFactory():
                      }
         return class_map[suffix](ticker, as_of_date)
 
-
 class Instrument:
-    _STATIC_FULL_PATH = os.path.join(system.project_path, '..\data\static.csv')
-    _OHLCV_PATH = os.path.join(system.project_path, '..\data\ohlcv')
+
     _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME',
                       'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST', }
 
@@ -39,19 +37,19 @@ class Instrument:
 
     @property
     def ohlcv(self):
-        return self._ohlcv_df
+        return self._ohlcv
 
     @property
     def unadjusted_ohlcv(self):
-        return self._unadjusted_ohlcv_df
+        return self._unadjusted_ohlcv
 
     @property
     def vol(self):
-        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=63, price_scale=False, annualised=True)
+        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=False, annualised=True)
 
     @property
     def price_vol(self):
-        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=63, price_scale=True, annualised=False)
+        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=True, annualised=False)
 
     @property
     def cont_size(self):
@@ -70,16 +68,13 @@ class Instrument:
         return self.block_value * self.price_vol
 
     @property
-    def fx(self):
-        return self._fx
-
-    @property
     def instrument_value_vol(self):
-        return self.instrument_currency_vol * self.fx
+        """ convert to from local ccy to usd """
+        return hydrogen.analytics.to_usd(self.instrument_currency_vol, self.ccy)
 
     @property
     def price(self):
-        return self.ohlcv.CLOSE.to_frame(self._ticker)
+        return self.ohlcv.CLOSE
 
     @property
     def diff(self):
@@ -94,8 +89,8 @@ class FX(Instrument):
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
         self._ccy = None
-        self._ohlcv_df = self._read_ohlcv(self._ticker)
-        self._unadjusted_ohlcv_df = self._ohlcv_df
+        self._ohlcv = self._read_ohlcv(self._ticker)
+        self._unadjusted_ohlcv_df = self._ohlcv
 
         prefix, suffix = self._ticker.rsplit(" ", maxsplit=1)
         carry_ticker = prefix + 'CR ' + suffix
@@ -104,7 +99,7 @@ class FX(Instrument):
     def _read_ohlcv(self, filename):
         ohlcv_df = pd.DataFrame()
 
-        filename = os.path.join(Future._OHLCV_PATH, self._ticker + '.csv')
+        filename = os.path.join(system.ohlcv_path, self._ticker + '.csv')
         if os.path.exists(filename):
             ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
@@ -135,20 +130,22 @@ class Future(Instrument):
         self._adj_dates = self._get_adj_dates(n_day=-1)
 
         if not read_multiple_files:
-            self._unadjusted_ohlcv_df = self._read_ohlcv(self._static_df.TICKER.iloc[0],
-                                                         self._adj_dates.START_DATE.iloc[0],
-                                                         self._adj_dates.END_DATE.iloc[0])
-            self._ohlcv_df = self.unadjusted_ohlcv
+            self._unadjusted_ohlcv = self._read_ohlcv(self._static_df.TICKER.iloc[0],
+                                                      self._adj_dates.START_DATE.iloc[0],
+                                                      self._adj_dates.END_DATE.iloc[0])
+            self._ohlcv = self.unadjusted_ohlcv
 
         else:
-            self._unadjusted_ohlcv_df = self._calc_ohlcv(self._adj_dates, method='no_adj')[0]
-            self._ohlcv_df, self._adj = self._calc_ohlcv(self._adj_dates, method='panama')
+            self._unadjusted_ohlcv = self._calc_ohlcv(self._adj_dates, method='no_adj')[0]
+            self._ohlcv, self._adj = self._calc_ohlcv(self._adj_dates, method='panama')
 
-            back_adj_dates = self._adj_dates.copy()[:-1]
+            back_adj_dates = self._adj_dates.copy()
             back_adj_dates.TICKER = back_adj_dates.NEXT_TICKER
+            back_adj_dates.NEXT_TICKER = back_adj_dates.NEXT_TICKER.shift(-1)
+            back_adj_dates = back_adj_dates[:-1]
             self._back_ohlcv_df = self._calc_ohlcv(back_adj_dates, method='no_adj')[0]
 
-            self.n_day_btw_contracts = self._adj_dates.END_DATE[self._adj_dates.END_DATE > self._ohlcv_df.index[-1].date()][:2].diff().iloc[1].days
+            self._n_day_btw_contracts = self._adj_dates.END_DATE[self._adj_dates.END_DATE > self._ohlcv.index[-1].date()][:2].diff().iloc[1].days
 
     @property
     def ticker_list(self):
@@ -173,7 +170,7 @@ class Future(Instrument):
     #        return exact_contract, prefix[:-1] + "[A-Z][0-9]+ " + suffix
 
     def _read_static_csv(self, ticker):
-        static_df = pd.read_csv(Future._STATIC_FULL_PATH).rename(columns=self._BBG_FIELD_MAP)
+        static_df = pd.read_csv(system.static_filename).rename(columns=self._BBG_FIELD_MAP)
         static_df.FUT_NOTICE_FIRST = pd.to_datetime(static_df.FUT_NOTICE_FIRST).dt.date
 
         static_df_filter = static_df[static_df.TICKER == ticker]
@@ -191,7 +188,7 @@ class Future(Instrument):
 
     def _read_ohlcv(self, ticker, start_date, end_date):
         ohlcv_df = pd.DataFrame()
-        filename = os.path.join(Future._OHLCV_PATH, ticker + '.csv')
+        filename = os.path.join(system.ohlcv_path, ticker + '.csv')
 
         if os.path.exists(filename):
             ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
@@ -199,8 +196,9 @@ class Future(Instrument):
             ohlcv_df = ohlcv_df[start_date:end_date]
             # only see data up to t-1 from as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
+            ohlcv_df.ffill(inplace=True)
             # ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
-            ohlcv_df = ohlcv_df.dropna(axis='index')
+            #ohlcv_df = ohlcv_df.dropna(axis='index')
         return ohlcv_df
 
     def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama'):
@@ -241,4 +239,4 @@ class Future(Instrument):
         return df, adj
 
     def _calc_daily_yield(self):
-        return (self._back_ohlcv_df - self._unadjusted_ohlcv_df) / self.n_day_btw_contracts
+        return (self._back_ohlcv_df - self._unadjusted_ohlcv) / self._n_day_btw_contracts

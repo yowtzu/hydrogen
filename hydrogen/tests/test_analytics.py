@@ -4,6 +4,7 @@ from hydrogen.instrument import InstrumentFactory
 import pandas as pd
 import numpy as np
 import hydrogen.analytics
+import hydrogen.system as system
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -24,16 +25,16 @@ class AnalyticsTest(unittest.TestCase):
         instrument_factory = InstrumentFactory()
         future_Z_1_Index = instrument_factory.create_instrument(future_Z_1_Index_ticker, as_of_date=as_of_date)
         self.ohlcv = future_Z_1_Index.ohlcv
-        pass
 
     def tearDown(self):
         pass
 
     def test_price_vol(self):
-        a = (hydrogen.analytics.vol(self.ohlcv, method='SD', window=21))
-        b = (hydrogen.analytics.vol(self.ohlcv, method='ATR', window=21))
-        c = (hydrogen.analytics.vol(self.ohlcv, method='YZ', window=21))
-        d = (hydrogen.analytics.vol(self.ohlcv, method='RS', window=21))
+        logger.debug(system.n_bday_in_3m)
+        a = (hydrogen.analytics.vol(self.ohlcv, method='SD', window=system.n_bday_in_3m, price_scale=True, annualised=False))
+        b = (hydrogen.analytics.vol(self.ohlcv, method='ATR', window=system.n_bday_in_3m, price_scale=True, annualised=False))
+        c = (hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=True, annualised=False))
+        d = (hydrogen.analytics.vol(self.ohlcv, method='RS', window=system.n_bday_in_3m, price_scale=True, annualised=False))
         res = pd.concat([a, b, c, d], axis=1)
         logger.debug(res)
 
