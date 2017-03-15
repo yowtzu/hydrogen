@@ -6,14 +6,17 @@ import pandas as pd
 from hydrogen.instrument import Future, InstrumentFactory, Instrument
 from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_capper, signal_scalar
 
-TICKERS = ["TY1 Comdty", "FV1 Comdty", "VG1 Comdty", "FVS1 Index", "MXNUSD Curncy", "C 1 Comdty"]
+TICKERS = ["TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "W 1 Comdty"]
+# TICKERS = ["TY1 Comdty","FV1 Comdty", "ES1 Index", "C 1 Comdty"]
 
 instrument_factory = InstrumentFactory()
 
 instruments = { ticker:instrument_factory.create_instrument(ticker, as_of_date='20161111') for ticker in TICKERS }
 
-inst = instruments["C 1 Comdty"]
-
+inst = instruments["TY1 Comdty"]
+inst = instruments["ES1 Index"]
+inst = instruments["UX1 Index"]
+inst = instruments["W 1 Comdty"]
 
 def forecast_to_position(inst: Instrument, forecast: pd.Series):
     volatility_scalar = system.vol_target_cash_daily / inst.instrument_value_vol
@@ -25,10 +28,11 @@ rules = [ (EWMAC, {"fast_span": 2, "slow_span": 8} ) ,
           (EWMAC, {"fast_span": 16, "slow_span": 64} ) ,
           (EWMAC, {"fast_span": 32, "slow_span": 128}),
           (EWMAC, {"fast_span": 64, "slow_span": 256}),
-          (carry, {})]
+          (carry, {"span":system.n_bday_in_year}) ]
 
-forecasts = [ signal_scalar(rule(inst, **kargs)) for rule, kargs in rules ]
-(forecasts[6]/9).plot()
+forecasts = [ rule(inst, **kargs) for rule, kargs in rules ]
+(forecasts[6]).plot()
+
 
 inst._adj_dates
 inst.ohlcv
@@ -37,7 +41,7 @@ import hydrogen.system as s
 inst._adj_dates
 inst._back_ohlcv_df.CLOSE
 pd.concat([inst._unadjusted_ohlcv.CLOSE, inst._back_ohlcv_df.CLOSE], axis=1)
-((inst._back_ohlcv_df.CLOSE-inst._unadjusted_ohlcv.CLOSE).ewm(22).mean()*0.25).plot()
+((inst._back_ohlcv_df.CLOSE-inst._unadjusted_ohlcv.CLOSE).ewm(22).mean()*16).plot()
 inst._back_ohlcv_df.CLOSE.plot()
 
 inst._back_ohlcv_df.CLOSE

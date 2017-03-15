@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-
+import hydrogen.system as system
 import hydrogen.analytics
 from hydrogen.portopt import port_opt
 
@@ -40,11 +40,11 @@ def EWMAC(instrument: hydrogen.instrument.Instrument, fast_span, slow_span):#w_s
 
     return signal
 
-def carry(instrument: hydrogen.instrument.Instrument, span=63):
-
-    ts = instrument._calc_daily_yield().CLOSE / instrument.vol
+def carry(instrument: hydrogen.instrument.Instrument, span=system.n_bday_in_3m, front_contract=False):
+    ts = instrument._calc_annual_yield()
     signal = ts.ewm(span = span).mean()
-
+    if front_contract:
+        signal = -signal
     return signal
 
 

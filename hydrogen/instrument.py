@@ -45,11 +45,11 @@ class Instrument:
 
     @property
     def vol(self):
-        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=False, annualised=True)
+        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=False, annualised=True)
 
     @property
     def price_vol(self):
-        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=True, annualised=False)
+        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=True, annualised=False)
 
     @property
     def cont_size(self):
@@ -79,11 +79,6 @@ class Instrument:
     @property
     def diff(self):
         return self.price.diff(1)
-
-    @property
-    def daily_yield(self):
-        return self._calc_daily_yield()
-
 
 class FX(Instrument):
     def __init__(self, ticker: str, as_of_date):
@@ -145,7 +140,10 @@ class Future(Instrument):
             back_adj_dates = back_adj_dates[:-1]
             self._back_ohlcv_df = self._calc_ohlcv(back_adj_dates, method='no_adj')[0]
 
-            self._n_day_btw_contracts = self._adj_dates.END_DATE[self._adj_dates.END_DATE > self._ohlcv.index[-1].date()][:2].diff().iloc[1].days
+            #n_day_btw_contracts = self._adj_dates.END_DATE[self._adj_dates.END_DATE > self._ohlcv.index[-1].date()][:2].diff().iloc[1].days
+            n_day_btw_contracts = self._adj_dates.END_DATE.diff().shift(-2).dt.days
+            n_day_btw_contracts.index = pd.to_datetime(self._adj_dates.FUT_NOTICE_FIRST)
+            self._n_day_btw_contracts = n_day_btw_contracts.asof(self._ohlcv.index)
 
     @property
     def ticker_list(self):
@@ -238,5 +236,5 @@ class Future(Instrument):
 
         return df, adj
 
-    def _calc_daily_yield(self):
-        return (self._back_ohlcv_df - self._unadjusted_ohlcv) / self._n_day_btw_contracts
+    def _calc_annual_yield(self):
+        return (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / (self._n_day_btw_contracts / system.n_day_in_year) /  (self.price_vol * system.root_n_bday_in_year)
