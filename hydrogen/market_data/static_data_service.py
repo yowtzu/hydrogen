@@ -2,15 +2,12 @@ from blp import blp
 import logging
 import pandas as pd
 import os
-import settings
+from hydrogen.system import config_filename, static_filename
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE_NAME = os.path.join(settings.PROJECT_ROOT, 'data\config.csv')
-STATIC_FILE_NAME = os.path.join(settings.PROJECT_ROOT, 'data\static.csv')
-
-ALL_TICKERS = pd.read_csv(CONFIG_FILE_NAME).TICKER.values
+ALL_TICKERS = pd.read_csv(config_filename).TICKER.values
 
 # remove FX Curncy as they are not future
 ALL_TICKERS = [ ticker for ticker in ALL_TICKERS if not ticker.endswith(" Curncy") ]
@@ -35,6 +32,6 @@ logging.debug('Step 2: Reformatting the dataframe')
 df.index.name = 'TICKER'
 logging.debug('Step 2: complete')
 
-logging.debug('Step 3: Storing the data to csv file: %s', STATIC_FILE_NAME)
-df.to_csv(STATIC_FILE_NAME)
+logging.debug('Step 3: Storing the data to csv file: %s', static_filename)
+df.to_csv(static_filename)
 logging.debug('Step 3: complete')

@@ -2,13 +2,12 @@ from blp import blp
 import logging
 import pandas as pd
 import os
-import settings
 import re
+from hydrogen.system import config_filename
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE_NAME = os.path.join(settings.PROJECT_ROOT, 'data\config.csv')
 
 FX_ROOT_TICKERS = ['EURUSD', 'GBPUSD', 'CHFUSD', 'CADUSD', 'AUDUSD', 'NZDUSD', 'KRWUSD', 'JPYUSD', 'MXNUSD',
                    'EURUSDCR', 'GBPUSDCR', 'CHFUSDCR', 'CADUSDCR', 'AUDUSDCR', 'NZDUSDCR', 'KRWUSDCR', 'JPYUSDCR', 'MXNUSDCR']
@@ -62,6 +61,6 @@ df_comb["IS_ENABLED"] = True
 df_comb["IS_ENABLED_INTRADAY"] = True
 logging.debug('Step 2: complete')
 
-logging.debug('Step 3: Storing the data to csv file: %s', CONFIG_FILE_NAME)
-df_comb.to_csv(CONFIG_FILE_NAME, index=False)
+logging.debug('Step 3: Storing the data to csv file: %s', config_filename)
+df_comb.to_csv(config_filename, index=False)
 logging.debug('Step 3: complete')

@@ -2,24 +2,22 @@ from blp import blp
 import logging
 import pandas as pd
 import os
-import settings
+from hydrogen.system import config_filename, static_filename, ohlcv_path
 from datetime import timedelta
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE_NAME = os.path.join(settings.PROJECT_ROOT, 'data\config.csv')
-DAILY_PRICE_DIR = os.path.join(settings.PROJECT_ROOT, 'data\ohlcv')
 OHLCV_FIELDS = ['PX_OPEN', 'PX_HIGH', 'PX_LOW', 'PX_LAST', 'PX_VOLUME']
 
-config = pd.read_csv(CONFIG_FILE_NAME, index_col='TICKER', parse_dates=[2, 3])
+config = pd.read_csv(config_filename, index_col='TICKER', parse_dates=[2, 3])
 # config = config.tail()
 
 blp_service = blp.BLPService()
 
 for ticker, row in config.iterrows():
     logger.debug('Working Ticker: %s', ticker)
-    file_name = os.path.join(DAILY_PRICE_DIR, ticker + '.csv')
+    file_name = os.path.join(ohlcv_path, ticker + '.csv')
     daily_df = pd.DataFrame(columns=['DATE'] + OHLCV_FIELDS).set_index('DATE')
     start_date = row.START_DATE
     end_date = row.END_DATE
