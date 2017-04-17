@@ -10,8 +10,24 @@ logger = logging.getLogger(__name__)
 
 
 class InstrumentFactory():
+    ''' Instrument factory that is responsible to create instrument objects
+
+    Ticker suffix (based on bloomberg convention) is used to determine what instrument object to create,
+    e.g. Curncy is for FX. It only supports Future and FX.
+
+    '''
+
     def create_instrument(self, ticker: str,
                           as_of_date=pd.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)):
+        '''Create instrument object based on the ticker suffix
+
+        Args:
+            ticker: Bloomberg ticker, e.g., ES1 Index
+            as_of_date: The date of the instrument
+
+        Returns:
+            An instrument object of the given ticker with meta data and price data as of as_of_date.
+        '''
         prefix, suffix = ticker.rsplit(" ", maxsplit=1)
         class_map = {"Curncy": FX,
                      "Comdty": Future,
@@ -20,9 +36,15 @@ class InstrumentFactory():
         return class_map[suffix](ticker, as_of_date)
 
 class Instrument:
+    ''' Based class to model tradable instruments with bloomberg ticker serve as identifier '''
 
-    _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN', 'PX_LOW': 'LOW', 'PX_HIGH': 'HIGH', 'PX_LAST': 'CLOSE', 'PX_VOLUME': 'VOLUME',
-                      'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST', }
+    _BBG_FIELD_MAP = {'PX_OPEN': 'OPEN',
+                      'PX_LOW': 'LOW',
+                      'PX_HIGH': 'HIGH',
+                      'PX_LAST': 'CLOSE',
+                      'PX_VOLUME': 'VOLUME',
+                      'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST',
+                      }
 
     def __init__(self, ticker: str, as_of_date):
         self._ticker = ticker
@@ -37,19 +59,31 @@ class Instrument:
 
     @property
     def ohlcv(self):
+        '''
+            Return the adjusted OHLCV price of the instrument
+
+        Return:
+            A data frame consists of adjusted daily prices and volume. Column names: OPEN, HIGH, LOW, CLOSE, VOLUME
+        '''
         return self._ohlcv
 
     @property
     def unadjusted_ohlcv(self):
+        '''
+            Return  the unadjusted OHLCV price of the instrument
+
+        Return:
+            A data frame consists of unadjusted daily prices and volume. Column names: OPEN, HIGH, LOW, CLOSE, VOLUME
+        '''
         return self._unadjusted_ohlcv
 
     @property
     def vol(self):
-        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=False, annualised=True)
+        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_unit=False, annualised=True)
 
     @property
     def price_vol(self):
-        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=True, annualised=False)
+        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_unit=True, annualised=False)
 
     @property
     def cont_size(self):
@@ -68,6 +102,11 @@ class Instrument:
         return self.block_value * self.price_vol
 
     @property
+    def standardised_cost(self):
+        return 0.003 # sharpe ratio unit
+        # return 2 * cost  / ( self.instrument_value_vol * system.root_n_bday_in_year)
+
+    @property
     def instrument_value_vol(self):
         """ convert to from local ccy to usd """
         return hydrogen.analytics.to_usd(self.instrument_currency_vol, self.ccy)
@@ -81,20 +120,27 @@ class Instrument:
         return self.price.diff(1)
 
 class FX(Instrument):
+    ''' FX instrument
+        Note that there is no volume for this type of instrument
+    '''
+
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
         self._ccy = None
         self._ohlcv = self._read_ohlcv(self._ticker)
-        self._unadjusted_ohlcv_df = self._ohlcv
+
+        self._unadjusted_ohlcv = self._ohlcv
 
         prefix, suffix = self._ticker.rsplit(" ", maxsplit=1)
         carry_ticker = prefix + 'CR ' + suffix
+
         self._cr_ohlcv = self._read_ohlcv(carry_ticker)
 
     def _read_ohlcv(self, filename):
         ohlcv_df = pd.DataFrame()
 
         filename = os.path.join(system.ohlcv_path, self._ticker + '.csv')
+
         if os.path.exists(filename):
             ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
@@ -104,11 +150,10 @@ class FX(Instrument):
 
         return ohlcv_df
 
-    def _calc_daily_yield(self):
-        return self._cr_ohlcv.CLOSE.pct_change().shift(1) - self.ohlcv.CLOSE.pct_change().shift(1)
-
-
 class Future(Instrument):
+    '''Future instrument
+    
+    '''
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
 
@@ -194,9 +239,9 @@ class Future(Instrument):
             ohlcv_df = ohlcv_df[start_date:end_date]
             # only see data up to t-1 from as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
-            ohlcv_df.ffill(inplace=True)
+            #ohlcv_df.ffill(inplace=True)
             # ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
-            #ohlcv_df = ohlcv_df.dropna(axis='index')
+            ohlcv_df = ohlcv_df.dropna(axis='index')
         return ohlcv_df
 
     def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama'):

@@ -9,6 +9,38 @@ from numpy.testing import assert_array_equal
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+class FXTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pass
+
+    @classmethod
+    def tearDownClass(cls):
+        pass
+
+    def setUp(self):
+        self.instrument_factory = InstrumentFactory()
+
+        self.aud_ticker = "AUDUSD Curncy"
+        self.as_of_date = pd.datetime(year=2010, month=3, day=21)
+        pass
+
+    def test_init(self):
+        aud_ticker = self.instrument_factory.create_instrument(self.aud_ticker, as_of_date=self.as_of_date)
+        self.assertEqual(aud_ticker._as_of_date, self.as_of_date)
+
+        target_price = 0.9225
+        date_index = pd.datetime(2010, 3, 19)
+        price = aud_ticker.unadjusted_ohlcv.ix[date_index, 'HIGH']
+        self.assertEqual(price, target_price)
+        adj_price = aud_ticker.ohlcv.ix[date_index, 'HIGH']
+        self.assertEqual(adj_price, target_price)
+
+        self.assertIsNone(aud_ticker.ccy)
+
+    def tearDown(self):
+        pass
+
 
 class FutureTest(unittest.TestCase):
     @classmethod
