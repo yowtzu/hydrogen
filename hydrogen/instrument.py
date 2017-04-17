@@ -94,17 +94,16 @@ class Instrument:
         return self._tick_size
 
     @property
+    def price(self):
+        return self.ohlcv.CLOSE
+
+    @property
     def block_value(self):
-        return 0.01 * self.ohlcv.CLOSE * self.cont_size
+        return 0.01 * self.price * self.cont_size
 
     @property
     def instrument_currency_vol(self):
         return self.block_value * self.price_vol
-
-    @property
-    def standardised_cost(self):
-        return 0.003 # sharpe ratio unit
-        # return 2 * cost  / ( self.instrument_value_vol * system.root_n_bday_in_year)
 
     @property
     def instrument_value_vol(self):
@@ -112,12 +111,11 @@ class Instrument:
         return hydrogen.analytics.to_usd(self.instrument_currency_vol, self.ccy)
 
     @property
-    def price(self):
-        return self.ohlcv.CLOSE
+    def standardised_cost(self):
+        # TODO:
+        return 0.003 # sharpe ratio unit
+        # return 2 * cost  / ( self.instrument_value_vol * system.root_n_bday_in_year)
 
-    @property
-    def diff(self):
-        return self.price.diff(1)
 
 class FX(Instrument):
     ''' FX instrument
@@ -126,9 +124,14 @@ class FX(Instrument):
 
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
+
+        # TODO: START
+        self._cont_size = 10000
+        self._tick_size = 1
+        # TODO: END
+
         self._ccy = None
         self._ohlcv = self._read_ohlcv(self._ticker)
-
         self._unadjusted_ohlcv = self._ohlcv
 
         prefix, suffix = self._ticker.rsplit(" ", maxsplit=1)
@@ -145,7 +148,7 @@ class FX(Instrument):
             ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
 
-            # only see data up to t-1 from as of date (inclusively)
+            # only see data up to as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
 
         return ohlcv_df
@@ -154,6 +157,7 @@ class Future(Instrument):
     '''Future instrument
     
     '''
+
     def __init__(self, ticker: str, as_of_date):
         super().__init__(ticker, as_of_date)
 
@@ -161,40 +165,44 @@ class Future(Instrument):
         # logger.debug('Ticker pattern: {}'.format(self._ticker_pattern))
 
         read_multiple_files, self._static_df = self._read_static_csv(self._ticker)
-
-        # logger.debug(self._static_df)
         self._cont_size = self._static_df.FUT_CONT_SIZE.values[0]
         self._tick_size = self._static_df.FUT_TICK_SIZE.values[0]
         self._ccy = self._static_df.CRNCY.values[0]
+        self._adj_info = self._get_adj_info(n_day=-1)
 
-        self._adj_dates = self._get_adj_dates(n_day=-1)
+        if read_multiple_files:
+            self._unadjusted_ohlcv, self._ohlcv, self._adj = self._calc_ohlcv(self._adj_info, method='panama')
 
-        if not read_multiple_files:
-            self._unadjusted_ohlcv = self._read_ohlcv(self._static_df.TICKER.iloc[0],
-                                                      self._adj_dates.START_DATE.iloc[0],
-                                                      self._adj_dates.END_DATE.iloc[0])
-            self._ohlcv = self.unadjusted_ohlcv
+            back_adj_info = self._adj_info.copy()
+            back_adj_info.TICKER = back_adj_info.TICKER.shift(-1)
+            back_adj_info.NEXT_TICKER = back_adj_info.NEXT_TICKER.shift(-1)
+            back_adj_info = back_adj_info[:-1]
+            self._back_ohlcv_df = self._calc_ohlcv(back_adj_info, method='no_adj')[0]
+
+            # calculate the days between contract
+            # n_day_btw_contracts = self._adj_dates.END_DATE.diff().shift(-2).dt.days
+            # n_day_btw_contracts.index = pd.to_datetime(self._adj_dates.FUT_NOTICE_FIRST)
+            # self._n_day_btw_contracts = n_day_btw_contracts.asof(self._ohlcv.index)
 
         else:
-            self._unadjusted_ohlcv = self._calc_ohlcv(self._adj_dates, method='no_adj')[0]
-            self._ohlcv, self._adj = self._calc_ohlcv(self._adj_dates, method='panama')
-
-            back_adj_dates = self._adj_dates.copy()
-            back_adj_dates.TICKER = back_adj_dates.NEXT_TICKER
-            back_adj_dates.NEXT_TICKER = back_adj_dates.NEXT_TICKER.shift(-1)
-            back_adj_dates = back_adj_dates[:-1]
-            self._back_ohlcv_df = self._calc_ohlcv(back_adj_dates, method='no_adj')[0]
-
-            #n_day_btw_contracts = self._adj_dates.END_DATE[self._adj_dates.END_DATE > self._ohlcv.index[-1].date()][:2].diff().iloc[1].days
-            n_day_btw_contracts = self._adj_dates.END_DATE.diff().shift(-2).dt.days
-            n_day_btw_contracts.index = pd.to_datetime(self._adj_dates.FUT_NOTICE_FIRST)
-            self._n_day_btw_contracts = n_day_btw_contracts.asof(self._ohlcv.index)
+            self._unadjusted_ohlcv = self._read_ohlcv(self._static_df.TICKER.iloc[0],
+                                                      self._adj_info.START_DATE.iloc[0],
+                                                      self._adj_info.END_DATE.iloc[0])
+            self._ohlcv = self.unadjusted_ohlcv
 
     @property
     def ticker_list(self):
         return self._static_df.TICKER.values
 
-    def _get_adj_dates(self, n_day=-1):
+    def _get_adj_info(self, n_day=-1):
+        ''' Calculate the start and end dates for each ticker, and the next tickers
+            Args:
+                n_day: day of adjustment, negative mean number of day before maturity
+                
+            Returns:
+                return a pd.DataFrame of five columns, TICKER, FUT_NOTICE_FIRST, START_DATE, END_DATE, NEXT_TICKER
+        '''
+
         roll_dates = self._static_df[["TICKER", "FUT_NOTICE_FIRST"]].copy()
         roll_dates['START_DATE'] = roll_dates.FUT_NOTICE_FIRST.shift(1).fillna(pd.to_datetime('20000101').date())
         roll_dates['END_DATE'] = roll_dates.FUT_NOTICE_FIRST.apply(lambda x: x + n_day * BDay()).dt.date
@@ -217,17 +225,18 @@ class Future(Instrument):
         static_df.FUT_NOTICE_FIRST = pd.to_datetime(static_df.FUT_NOTICE_FIRST).dt.date
 
         static_df_filter = static_df[static_df.TICKER == ticker]
-        read_multiple_files = False
 
         if static_df_filter.empty:
             prefix, suffix = ticker.rsplit(" ", maxsplit=1)
             ticker_pattern = prefix[:-1] + "[A-Z][0-9]+ "
             static_df_filter = static_df[static_df.TICKER.str.contains(ticker_pattern)]
             read_multiple_files = True
+        else:
+            read_multiple_files = False
 
-        static_df_filter = static_df_filter.sort_values(by='FUT_NOTICE_FIRST')
+        static_df = static_df_filter.sort_values(by='FUT_NOTICE_FIRST')
 
-        return read_multiple_files, static_df_filter
+        return read_multiple_files, static_df
 
     def _read_ohlcv(self, ticker, start_date, end_date):
         ohlcv_df = pd.DataFrame()
@@ -237,11 +246,14 @@ class Future(Instrument):
             ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
             ohlcv_df = ohlcv_df[start_date:end_date]
-            # only see data up to t-1 from as of date (inclusively)
+
+            # only see data up to as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
+
             #ohlcv_df.ffill(inplace=True)
-            # ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
+            #ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
             ohlcv_df = ohlcv_df.dropna(axis='index')
+
         return ohlcv_df
 
     def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama'):
@@ -252,8 +264,9 @@ class Future(Instrument):
         if not isinstance(adj_dates, pd.DataFrame):
             raise ValueError('Calendar must be pandas DataFrame')
 
-        df = pd.concat([self._read_ohlcv(row.TICKER, row.START_DATE, row.END_DATE)
+        df_no_adj = pd.concat([self._read_ohlcv(row.TICKER, row.START_DATE, row.END_DATE)
                         for _, row in adj_dates.iterrows()])
+        df = df_no_adj.copy()
         close = df.CLOSE
 
         next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.END_DATE, row.END_DATE)
@@ -279,7 +292,7 @@ class Future(Instrument):
             adj = next_close  # to get the data frame shape
             adj[:] = 0
 
-        return df, adj
+        return df_no_adj, df, adj
 
-    def _calc_annual_yield(self):
+    #def _calc_annual_yield(self):
         return (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / (self._n_day_btw_contracts / system.n_day_in_year) /  (self.price_vol * system.root_n_bday_in_year)

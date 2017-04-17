@@ -31,10 +31,10 @@ class AnalyticsTest(unittest.TestCase):
 
     def test_price_vol(self):
         logger.debug(system.n_bday_in_3m)
-        a = (hydrogen.analytics.vol(self.ohlcv, method='SD', window=system.n_bday_in_3m, price_scale=True, annualised=False))
-        b = (hydrogen.analytics.vol(self.ohlcv, method='ATR', window=system.n_bday_in_3m, price_scale=True, annualised=False))
-        c = (hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, price_scale=True, annualised=False))
-        d = (hydrogen.analytics.vol(self.ohlcv, method='RS', window=system.n_bday_in_3m, price_scale=True, annualised=False))
+        a = (hydrogen.analytics.vol(self.ohlcv, method='SD', window=system.n_bday_in_3m, price_unit=True, annualised=False))
+        b = (hydrogen.analytics.vol(self.ohlcv, method='ATR', window=system.n_bday_in_3m, price_unit=True, annualised=False))
+        c = (hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, price_unit=True, annualised=False))
+        d = (hydrogen.analytics.vol(self.ohlcv, method='RS', window=system.n_bday_in_3m, price_unit=True, annualised=False))
         res = pd.concat([a, b, c, d], axis=1)
         logger.debug(res)
 

@@ -1,5 +1,5 @@
 system:
-  trading_capital: 10000000
+  trading_capital: 1000000
   vol_target_pct: 0.2 # see page 147 for setting
 
   n_day_in_year: 365

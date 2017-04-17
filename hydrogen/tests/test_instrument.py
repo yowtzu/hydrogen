@@ -104,18 +104,19 @@ class FutureTest(unittest.TestCase):
 
     def test_read_daily_csv(self):
         future_M6_Index = self.instrument_factory.create_instrument("Z M6 Index", as_of_date=pd.datetime(year=2016, month=3, day=21))
-        logger.debug(future_M6_Index.ohlcv)
+        logger.debug(future_M6_Index.ohlcv.index[0])
         self.assertEqual(future_M6_Index.ohlcv.index[0], pd.datetime(2015, 10, 28))
         self.assertEqual(future_M6_Index.ohlcv.index[-1], pd.datetime(2016, 3, 21))
 
     def test_get_panama_adj_dates(self):
         future_Z_1_Index = self.instrument_factory.create_instrument(self.future_Z_1_Index_ticker, as_of_date=self.as_of_date)
-        adj_dates = future_Z_1_Index._get_adj_dates(-1)
-        logging.debug(adj_dates)
-        self.assertEqual(adj_dates.TICKER.iloc[0], 'Z H05 Index')
-        self.assertEqual(adj_dates.FUT_NOTICE_FIRST.iloc[0], pd.to_datetime('20050318').date())
-        self.assertEqual(adj_dates.START_DATE.iloc[0], pd.to_datetime('20000101').date())
-        self.assertEqual(adj_dates.END_DATE.iloc[0], pd.datetime(2005, 3, 17).date())
+        adj_info = future_Z_1_Index._get_adj_info(-1)
+        logging.debug(adj_info)
+        self.assertEqual(adj_info.TICKER.iloc[0], 'Z H05 Index')
+        self.assertEqual(adj_info.NEXT_TICKER.iloc[0], 'Z M05 Index')
+        self.assertEqual(adj_info.FUT_NOTICE_FIRST.iloc[0], pd.to_datetime('20050318').date())
+        self.assertEqual(adj_info.START_DATE.iloc[0], pd.to_datetime('20000101').date())
+        self.assertEqual(adj_info.END_DATE.iloc[0], pd.datetime(2005, 3, 17).date())
 
     def test_roll_panama(self):
         future_Z_1_Index = self.instrument_factory.create_instrument(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
@@ -125,13 +126,13 @@ class FutureTest(unittest.TestCase):
 
     def test_roll_ratios(self):
         future_Z_1_Index = self.instrument_factory.create_instrument(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_dates(), method='ratio')
+        _ , df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_info(), method='ratio')
         self.assertEqual(df.CLOSE.ix[0], 4164.0823710527939)
         self.assertEqual(adj.ix['20050616'], 0.85776142863478932)
 
     def test_roll_no_adj(self):
         future_Z_1_Index = self.instrument_factory.create_instrument(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_dates(), method='no_adj')
+        _ , df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_info(), method='no_adj')
         self.assertEqual(df.CLOSE.ix[0], 4834.5)
         self.assertEqual(adj.ix['20050616'], 0)
 

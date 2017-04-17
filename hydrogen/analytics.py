@@ -6,18 +6,7 @@ import hydrogen.system as system
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-
-def nearest_date_after(dates: pd.Series, pivot_date: pd.tslib.Timestamp):
-    res = dates[pivot_date < dates]
-    return res[0] if not res.empty else None
-
-
-def nearest_date_before(dates: pd.Series, pivot_date: pd.tslib.Timestamp):
-    res = dates[dates < pivot_date]
-    return res.iloc[-1] if not res.empty else None
-
-
-def vol(price_df: pd.DataFrame, price_scale, annualised,  method: str = 'YZ', **kwargs) -> pd.TimeSeries:
+def vol(price_df: pd.DataFrame, price_unit, annualised, method: str = 'YZ', **kwargs) -> pd.TimeSeries:
     """
 
     Args:
@@ -36,7 +25,7 @@ def vol(price_df: pd.DataFrame, price_scale, annualised,  method: str = 'YZ', **
         'YZ': _vol_yz
     }.get(method)(price_df, **kwargs)
 
-    if price_scale:
+    if price_unit:
         res *= price_df.CLOSE
 
     if annualised:
@@ -47,28 +36,29 @@ def vol(price_df: pd.DataFrame, price_scale, annualised,  method: str = 'YZ', **
 
 def _vol_std_dev(price_df: pd.DataFrame, ewm=False, **kwargs) -> pd.TimeSeries:
     price_df["CLOSE_PREV"] = price_df.CLOSE.shift(1)
+    log_return = np.log(price_df.CLOSE / price_df.CLOSE_PREV)
 
     if ewm:
-        res = np.log(price_df.CLOSE / price_df.CLOSE_PREV).ewm(**kwargs).std()
+        res = log_return.ewm(**kwargs).std()
     else:
-        res = np.log(price_df.CLOSE / price_df.CLOSE_PREV).rolling(**kwargs).std()
+        res = log_return.rolling(**kwargs).std()
 
     return res
 
 
 def _vol_atr(price_df: pd.DataFrame, ewm=False, **kwargs):
     price_df["CLOSE_PREV"] = price_df.CLOSE.shift(1)
-
     true_range_series = np.maximum(np.maximum(
         price_df.HIGH - price_df.LOW,
         np.abs(price_df.HIGH - price_df.CLOSE_PREV)),
         np.abs(price_df.CLOSE - price_df.CLOSE_PREV))
+
     if ewm:
         average_true_range_series = true_range_series.ewm(**kwargs).mean()  # i.e., span=27, alpha=1/14
     else:
         average_true_range_series = true_range_series.rolling(**kwargs).mean()  # i.e., span=27, alpha=1/14
 
-    return average_true_range_series / price_df.CLOSE / 1.645
+    return average_true_range_series #/ price_df.CLOSE / 1.645
 
 
 def _vol_rs(price_df: pd.DataFrame, ewm=False, **kwargs):
@@ -101,7 +91,6 @@ def _vol_yz(price_df: pd.DataFrame, ewm=False, **kwargs):
     k = 0.34 / (1.34 + (window + 1) / (window - 1))
 
     return np.sqrt(overnight_var + k * open_close_var + (1 - k) * rs_var)
-
 
 def summary(df: pd.DataFrame, **kwargs):
     stats = df.describe()
