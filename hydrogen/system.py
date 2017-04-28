@@ -30,3 +30,5 @@ n_bday_in_3m = n_bday_in_year // 4
 
 vol_target_cash_annual = trading_capital * vol_target_pct
 vol_target_cash_daily = vol_target_cash_annual / root_n_bday_in_year
+
+target_abs_forecast = 10.0
