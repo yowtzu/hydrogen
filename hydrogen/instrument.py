@@ -79,11 +79,7 @@ class Instrument:
 
     @property
     def vol(self):
-        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_unit=False, annualised=True)
-
-    @property
-    def price_vol(self):
-        return hydrogen.analytics.vol(self.unadjusted_ohlcv, method='YZ', window=system.n_bday_in_3m, price_unit=True, annualised=False)
+        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, annualised=True)
 
     @property
     def cont_size(self):
@@ -94,28 +90,36 @@ class Instrument:
         return self._tick_size
 
     @property
-    def price(self):
-        return self.ohlcv.CLOSE
+    def block_value(self):
+        ''' The amount of PnL in local cash term  for 1% price movement '''
+        return 0.01 * self.cont_size * self.unadjusted_ohlcv.CLOSE
 
     @property
-    def block_value(self):
-        return 0.01 * self.price * self.cont_size
+    def daily_price_vol(self):
+        '''' SD of % daily change '''
+        return 100*hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, annualised=False)
 
     @property
     def instrument_currency_vol(self):
-        return self.block_value * self.price_vol
+        return self.block_value * self.daily_price_vol
 
     @property
     def instrument_value_vol(self):
         """ convert to from local ccy to usd """
-        return hydrogen.analytics.to_usd(self.instrument_currency_vol, self.ccy)
+        if self.ccy=='USD':
+            return self.instrument_currency_vol
+        else:
+            return self.instrument_currency_vol *  self.fx.ohlcv.CLOSE[self.instrument_currency_vol.index]
 
     @property
-    def standardised_cost(self):
-        # TODO:
-        return 0.003 # sharpe ratio unit
-        # return 2 * cost  / ( self.instrument_value_vol * system.root_n_bday_in_year)
+    def cost(self):
+        execution_cost = self.tick_size / 2 * self.cont_size
+        ticker_cost = execution_cost # TODO: assumption
+        return execution_cost + ticker_cost
 
+    @property
+    def cost_in_SR(self):
+        return 2 * self.cost / (16 * self.instrument_currency_vol)
 
 class FX(Instrument):
     ''' FX instrument
@@ -169,6 +173,9 @@ class Future(Instrument):
         self._tick_size = self._static_df.FUT_TICK_SIZE.values[0]
         self._ccy = self._static_df.CRNCY.values[0]
         self._adj_info = self._get_adj_info(n_day=-1)
+
+        instrument_factory = InstrumentFactory()
+        self.fx = instrument_factory.create_instrument(self._ccy + 'USD Curncy')
 
         if read_multiple_files:
             self._unadjusted_ohlcv, self._ohlcv, self._adj = self._calc_ohlcv(self._adj_info, method='panama')
@@ -295,4 +302,4 @@ class Future(Instrument):
         return df_no_adj, df, adj
 
     #def _calc_annual_yield(self):
-        return (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / (self._n_day_btw_contracts / system.n_day_in_year) /  (self.price_vol * system.root_n_bday_in_year)
+        return (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / (self._n_day_btw_contracts / system.n_day_in_year) /  (self.daily_price_vol * system.root_n_bday_in_year)

@@ -1,57 +1,94 @@
 import matplotlib.pyplot as plt
-import hydrogen.system as system
-import seaborn as sns
 import numpy as np
 import pandas as pd
 from hydrogen.instrument import Future, InstrumentFactory, Instrument
-from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_capper, signal_scalar
+from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_clipper, signal_scalar, forecast_to_position, cost, Portfolio
+from hydrogen.portopt import port_opt
+import hydrogen.system as system
 
-TICKERS = ["TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "W 1 Comdty"]
-# TICKERS = ["TY1 Comdty","FV1 Comdty", "ES1 Index", "C 1 Comdty"]
+TICKERS = ["TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "W 1 Comdty", 'Z 1 Index', "VG1 Index"]
+
+port = Portfolio('Test Portfolio')
+port.set_instruments(TICKERS, as_of_date='20170301')
+port.forecast('TY1 Comdty')
 
 instrument_factory = InstrumentFactory()
 
-instruments = { ticker:instrument_factory.create_instrument(ticker, as_of_date='20161111') for ticker in TICKERS }
+instruments = { ticker:instrument_factory.create_instrument(ticker, as_of_date='20170301') for ticker in TICKERS }
 
-inst = instruments["TY1 Comdty"]
-inst = instruments["ES1 Index"]
-inst = instruments["UX1 Index"]
-inst = instruments["W 1 Comdty"]
+inst_vg = instruments["VG1 Index"]
+inst_ftse = instruments["Z 1 Index"]
+inst_es = instruments['ES1 Index']
+inst = instruments['ES1 Index']
 
-def forecast_to_position(inst: Instrument, forecast: pd.Series):
-    volatility_scalar = system.vol_target_cash_daily / inst.instrument_value_vol
-    return forecast * volatility_scalar / system.avg_abs_forecast
+subset = [inst_vg, inst_ftse, inst_es]
+### missout cont size
+cost_in_SR = pd.concat([ i.cost_in_SR for i in subset ], axis=1)
 
-rules = [ (EWMAC, {"fast_span": 2, "slow_span": 8} ) ,
-          (EWMAC, {"fast_span": 4, "slow_span": 16} ) ,
+pd.concat([ i.daily_price_vol for i in subset ], axis=1)[:'20150701'].plot()
+pd.concat([ i.unadjusted_ohlcv.CLOSE for i in subset ], axis=1)[:'20150701'].plot()
+
+rules = [# (EWMAC, {"fast_span": 2, "slow_span": 8} ) ,
+        #  (EWMAC, {"fast_span": 4, "slow_span": 16} ) ,
           (EWMAC, {"fast_span": 8, "slow_span": 32} ) ,
-          (EWMAC, {"fast_span": 16, "slow_span": 64} ) ,
+        #  (EWMAC, {"fast_span": 16, "slow_span": 64} ) ,
           (EWMAC, {"fast_span": 32, "slow_span": 128}),
-          (EWMAC, {"fast_span": 64, "slow_span": 256}),
-          (carry, {"span":system.n_bday_in_year}) ]
+          (EWMAC, {"fast_span": 64, "slow_span": 256})]
+          #(carry, {"span":system.n_bday_in_3m}) ]
 
 forecasts = [ rule(inst, **kargs) for rule, kargs in rules ]
-(forecasts[6]).plot()
+scaled_forecasts = [ (signal_scalar(forecast)) for forecast in forecasts ]
+forecasts_df = pd.concat(scaled_forecasts, axis=1)
+forecasts_df.plot()
 
 
-inst._adj_dates
-inst.ohlcv
-import hydrogen.analytics
-import hydrogen.system as s
-inst._adj_dates
-inst._back_ohlcv_df.CLOSE
-pd.concat([inst._unadjusted_ohlcv.CLOSE, inst._back_ohlcv_df.CLOSE], axis=1)
-((inst._back_ohlcv_df.CLOSE-inst._unadjusted_ohlcv.CLOSE).ewm(22).mean()*16).plot()
-inst._back_ohlcv_df.CLOSE.plot()
+#### combine forecasts to forecast, based on the correlation and the return of each forecast
+positions = forecasts_df.apply(lambda x: forecast_to_position(inst, x))
+positions.plot()
 
-inst._back_ohlcv_df.CLOSE
-inst._adj_dates
-    ohlcv.CLOSE.plot()
+##################
 
-((inst.ohlcv.CLOSE.ewm(span=64).mean() - inst.ohlcv.CLOSE.ewm(span=256).mean())/hydrogen.analytics.vol(inst.ohlcv, method='YZ', window=63, price_scale=True, annualised=False)).plot()
-pnls = forecasts
-#positions = [ forecast_to_position(inst, forecast) for forecast in forecasts ]
-(forecasts[6])['2008-01-01':].plot()
+costs = positions.apply(lambda x: cost(inst, x))
+
+scaled_forecasts.apply()
+
+  ################################################
+
+def position_to_return(inst: Instrument, position : pd.Series, include_cost: bool = True):
+    cost_in_SR = inst.cost_in_SR
+    if include_cost:
+        cost = 2 * positions.diff().abs() * inst.tick_size * inst.cont_size
+    return position * inst.unadjusted_ohlcv.CLOSE.diff() * inst.block_value - cost
+
+returns = positions.apply(lambda x: position_to_return(inst, x))
+
+returns.cumsum().plot()
+
+positions[1].diff().abs()
+returns.plot()
+
+16*pnls.mean()/pnls.std()
+pnls.cumsum().plot()
+
+weights = port_opt(pnls, 'bootstrap', 'expanding', step=66)
+weights = weights.asof(forecasts.index)
+forecast_corr = forecasts.expanding().corr()
+ww = np.vstack([ weights.ix[t,:].dot(forecast_corr[t,:,:]).dot(weights.ix[t,:].T) for t in np.arange(weights.shape[0])])
+ww=pd.Series(ww[:,0], index=weights.index)
+ww.plot()
+weights*forecasts.mul(ww, axis=0)
+single_forecast=((forecasts*weights).sum(axis=1)*ww)
+
+single_position = forecast_to_position(inst, single_forecast).shift(1)
+single_pnl = single_position.mul(inst.ohlcv.CLOSE.diff(1), axis=0).mul(inst.block_value, axis=0)
+single_pnl.cumsum().plot()
+16*single_pnl.mean()/single_pnl.std()
+
+
+
+
+########################
+
 def position_to_return(inst: Instrument, position: pd.Series):
     return position.shift(1) * inst.ohlcv.CLOSE.diff(1)
 

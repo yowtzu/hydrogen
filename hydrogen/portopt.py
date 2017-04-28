@@ -143,7 +143,7 @@ if __name__=='__main__':
     daily_df = daily_df.fillna(0)#
 
     ## Down-sample to weekly
-    weekly_df = daily_df.resample('1W').sum().diff()
+    weekly_df = daily_df.resample('1W').sum()
     res = port_opt(daily_df, 'one_period', 'in_sample')
     res1 = port_opt(daily_df, 'one_period', 'in_sample', use_standardise_vol=True)
     res2 = port_opt(daily_df, 'one_period', 'in_sample', use_equal_means=True, use_standardise_vol=True)
