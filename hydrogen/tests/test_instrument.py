@@ -31,6 +31,7 @@ class FXTest(unittest.TestCase):
 
         target_price = 0.9225
         date_index = pd.datetime(2010, 3, 19)
+        print(aud_ticker.unadjusted_ohlcv.head())
         price = aud_ticker.unadjusted_ohlcv.ix[date_index, 'HIGH']
         self.assertEqual(price, target_price)
         adj_price = aud_ticker.ohlcv.ix[date_index, 'HIGH']
@@ -54,7 +55,10 @@ class FutureTest(unittest.TestCase):
     def setUp(self):
         self.instrument_factory = InstrumentFactory()
 
+        self.future_VG_1_Index_ticker = "VG1 Index"
+        self.future_ES_1_Index_ticker = "ES1 Index"
         self.future_Z_1_Index_ticker = "Z 1 Index"
+        self.future_CL_1_Comdty_ticker = "CL1 Comdty"
         self.future_CLH14_Comdty_ticker = "CLH14 Comdty"
         self.future_CLH15_Comdty_ticker = "CLH15 Comdty"
         self.as_of_date = pd.datetime(year=2010, month=3, day=21)
@@ -117,25 +121,44 @@ class FutureTest(unittest.TestCase):
         self.assertEqual(adj_info.FUT_NOTICE_FIRST.iloc[0], pd.to_datetime('20050318').date())
         self.assertEqual(adj_info.START_DATE.iloc[0], pd.to_datetime('20000101').date())
         self.assertEqual(adj_info.END_DATE.iloc[0], pd.datetime(2005, 3, 17).date())
+        self.assertEqual(adj_info.FUT_NOTICE_FIRST.iloc[1], pd.to_datetime('20050617').date())
+        self.assertEqual(adj_info.START_DATE.iloc[1], pd.to_datetime('20050318').date())
+        self.assertEqual(adj_info.END_DATE.iloc[1], pd.datetime(2005, 6, 16).date())
+
+        self.assertEqual(adj_info.TICKER.iloc[0], 'Z H05 Index')
+        self.assertEqual(adj_info.NEXT_TICKER.iloc[0], 'Z M05 Index')
+        self.assertEqual(adj_info.FUT_NOTICE_FIRST.iloc[1], pd.to_datetime('20050617').date())
+        self.assertEqual(adj_info.START_DATE.iloc[1], pd.to_datetime('20050314').date())
+        self.assertEqual(adj_info.END_DATE.iloc[1], pd.datetime(2005, 6, 10).date())
+
 
     def test_roll_panama(self):
         future_Z_1_Index = self.instrument_factory.create_instrument(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        #df, adj = future_Z_1_Index.ohlcv(future_Z_1_Index._get_adj_dates(n_day=-1))
-        self.assertEqual(future_Z_1_Index.ohlcv.CLOSE.ix[0], 3970.5)
-        self.assertEqual(future_Z_1_Index._adj.ix['20050616'], -884.5)
+        _, df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_info(n_day=-1))
+        self.assertEqual(df.CLOSE.ix[0], 3970.5)
+        self.assertEqual(adj.ix['20050616'], -884.5)
 
     def test_roll_ratios(self):
         future_Z_1_Index = self.instrument_factory.create_instrument(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        _ , df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_info(), method='ratio')
+        _ , df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_info(n_day=-1), method='ratio')
         self.assertEqual(df.CLOSE.ix[0], 4164.0823710527939)
         self.assertEqual(adj.ix['20050616'], 0.85776142863478932)
 
     def test_roll_no_adj(self):
         future_Z_1_Index = self.instrument_factory.create_instrument(self.future_Z_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
-        _ , df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_info(), method='no_adj')
+        _ , df, adj = future_Z_1_Index._calc_ohlcv(future_Z_1_Index._get_adj_info(n_day=-1), method='no_adj')
         self.assertEqual(df.CLOSE.ix[0], 4834.5)
         self.assertEqual(adj.ix['20050616'], 0)
 
+    def test_length(self):
+        future_VG_1_Index = self.instrument_factory.create_instrument(self.future_VG_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        future_ES_1_Index = self.instrument_factory.create_instrument(self.future_ES_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        future_CL_1_Index = self.instrument_factory.create_instrument(self.future_CL_1_Comdty_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
+        print(future_VG_1_Index.ohlcv.index.difference(future_CL_1_Index.ohlcv.index))
+        print(future_VG_1_Index._adj_info.tail(20))
+        print(future_CL_1_Index._adj_info.tail(50))
+        self.assertEqual(len(future_ES_1_Index.ohlcv), len(future_VG_1_Index.ohlcv))
+        self.assertEqual(len(future_CL_1_Index.ohlcv), len(future_VG_1_Index.ohlcv))
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')

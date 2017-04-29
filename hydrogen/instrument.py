@@ -49,6 +49,7 @@ class Instrument:
     def __init__(self, ticker: str, as_of_date):
         self._ticker = ticker
         self._as_of_date = as_of_date
+        self.b_day_list = pd.date_range('20050101', as_of_date, freq='1B')
 
     def __repr__(self):
         return str(self.__class__) + ":" + self._ticker + " as of " + str(self._as_of_date)
@@ -143,7 +144,7 @@ class FX(Instrument):
 
         self._cr_ohlcv = self._read_ohlcv(carry_ticker)
 
-    def _read_ohlcv(self, filename):
+    def _read_ohlcv(self, filename, resample_method='1B'):
         ohlcv_df = pd.DataFrame()
 
         filename = os.path.join(system.ohlcv_path, self._ticker + '.csv')
@@ -154,6 +155,9 @@ class FX(Instrument):
 
             # only see data up to as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
+
+            if resample_method:
+                ohlcv_df = ohlcv_df.resample(resample_method).pad()
 
         return ohlcv_df
 
@@ -172,7 +176,7 @@ class Future(Instrument):
         self._cont_size = self._static_df.FUT_CONT_SIZE.values[0]
         self._tick_size = self._static_df.FUT_TICK_SIZE.values[0]
         self._ccy = self._static_df.CRNCY.values[0]
-        self._adj_info = self._get_adj_info(n_day=-1)
+        self._adj_info = self._get_adj_info(n_day=-3)
 
         instrument_factory = InstrumentFactory()
         self.fx = instrument_factory.create_instrument(self._ccy + 'USD Curncy')
@@ -201,7 +205,7 @@ class Future(Instrument):
     def ticker_list(self):
         return self._static_df.TICKER.values
 
-    def _get_adj_info(self, n_day=-1):
+    def _get_adj_info(self, n_day):
         ''' Calculate the start and end dates for each ticker, and the next tickers
             Args:
                 n_day: day of adjustment, negative mean number of day before maturity
@@ -211,7 +215,7 @@ class Future(Instrument):
         '''
 
         roll_dates = self._static_df[["TICKER", "FUT_NOTICE_FIRST"]].copy()
-        roll_dates['START_DATE'] = roll_dates.FUT_NOTICE_FIRST.shift(1).fillna(pd.to_datetime('20000101').date())
+        roll_dates['START_DATE'] = roll_dates.FUT_NOTICE_FIRST.apply(lambda x: x + (1 + n_day) * BDay()).shift(1).fillna(pd.to_datetime('20000101').date()).dt.date
         roll_dates['END_DATE'] = roll_dates.FUT_NOTICE_FIRST.apply(lambda x: x + n_day * BDay()).dt.date
         roll_dates['NEXT_TICKER'] = roll_dates.TICKER.shift(-1).fillna('')
         return roll_dates
@@ -245,7 +249,7 @@ class Future(Instrument):
 
         return read_multiple_files, static_df
 
-    def _read_ohlcv(self, ticker, start_date, end_date):
+    def _read_ohlcv(self, ticker, start_date, end_date, resample_method='1B'):
         ohlcv_df = pd.DataFrame()
         filename = os.path.join(system.ohlcv_path, ticker + '.csv')
 
@@ -261,9 +265,12 @@ class Future(Instrument):
             #ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
             ohlcv_df = ohlcv_df.dropna(axis='index')
 
+            if resample_method:
+                ohlcv_df = ohlcv_df.resample(resample_method).pad()
+
         return ohlcv_df
 
-    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama'):
+    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama', resample_method='1B'):
 
         if method not in ['ratio', 'panama', 'no_adj']:
             raise ValueError('method is not valid: ' + method)
@@ -273,6 +280,10 @@ class Future(Instrument):
 
         df_no_adj = pd.concat([self._read_ohlcv(row.TICKER, row.START_DATE, row.END_DATE)
                         for _, row in adj_dates.iterrows()])
+
+        if resample_method:
+            df_no_adj = df_no_adj.resample(resample_method).pad()
+
         df = df_no_adj.copy()
         close = df.CLOSE
 

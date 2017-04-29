@@ -6,7 +6,7 @@ import hydrogen.analytics
 from hydrogen.portopt import port_opt
 from hydrogen.instrument import Instrument
 
-def EWMAC(inst: Instrument, fast_span, slow_span):#w_span_pair=[(2, 8), (4, 16), (8, 32), (16, 64), (32, 128), (64, 256)]):
+def EWMAC(rulename: str, inst: Instrument, fast_span, slow_span):#w_span_pair=[(2, 8), (4, 16), (8, 32), (16, 64), (32, 128), (64, 256)]):
     """
     :param price: the price level time series
     :type price: pd.DataFrame
@@ -25,7 +25,8 @@ def EWMAC(inst: Instrument, fast_span, slow_span):#w_span_pair=[(2, 8), (4, 16),
     """
 
     signal = (inst.ohlcv.CLOSE.ewm(span=fast_span).mean() - inst.ohlcv.CLOSE.ewm(span=slow_span).mean()) / (inst.daily_price_vol * inst.ohlcv.CLOSE)
-    signal = signal.rename('S_EWMAC_%s_%s'.format(fast_span, slow_span))
+    #signal = signal.rename('S_EWMAC_{fast}_{slow}'.format(fast_span, slow_span))
+    signal = signal.rename(rulename)
     return signal
 
 def signal_scalar(signal: pd.Series, target_abs_forecast=system.target_abs_forecast):
