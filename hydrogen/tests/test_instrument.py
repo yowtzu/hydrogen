@@ -125,6 +125,7 @@ class FutureTest(unittest.TestCase):
         self.assertEqual(adj_info.START_DATE.iloc[1], pd.to_datetime('20050318').date())
         self.assertEqual(adj_info.END_DATE.iloc[1], pd.datetime(2005, 6, 16).date())
 
+        adj_info = future_Z_1_Index._get_adj_info(n_day=-5)
         self.assertEqual(adj_info.TICKER.iloc[0], 'Z H05 Index')
         self.assertEqual(adj_info.NEXT_TICKER.iloc[0], 'Z M05 Index')
         self.assertEqual(adj_info.FUT_NOTICE_FIRST.iloc[1], pd.to_datetime('20050617').date())
@@ -155,8 +156,7 @@ class FutureTest(unittest.TestCase):
         future_ES_1_Index = self.instrument_factory.create_instrument(self.future_ES_1_Index_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
         future_CL_1_Index = self.instrument_factory.create_instrument(self.future_CL_1_Comdty_ticker, as_of_date=pd.datetime(year=2016, month=3, day=21))
         print(future_VG_1_Index.ohlcv.index.difference(future_CL_1_Index.ohlcv.index))
-        print(future_VG_1_Index._adj_info.tail(20))
-        print(future_CL_1_Index._adj_info.tail(50))
+
         self.assertEqual(len(future_ES_1_Index.ohlcv), len(future_VG_1_Index.ohlcv))
         self.assertEqual(len(future_CL_1_Index.ohlcv), len(future_VG_1_Index.ohlcv))
 
