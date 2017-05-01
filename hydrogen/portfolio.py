@@ -1,7 +1,8 @@
 import pandas as pd
 from collections import OrderedDict
-from hydrogen.instrument import InstrumentFactory, Instrument
+from hydrogen.instrument import InstrumentFactory
 from hydrogen.trading_rules import signal_scalar, signal_clipper, EWMAC
+import hydrogen.system as system
 
 class Portfolio:
 
@@ -13,7 +14,7 @@ class Portfolio:
             ('EWMAC_8_32', EWMAC, {"fast_span": 8, "slow_span": 32}),
             ('EWMAC_16_64', EWMAC, {"fast_span": 16, "slow_span": 64} ) ,
             ('EWMAC_32_128', EWMAC, {"fast_span": 32, "slow_span": 128}),
-            ('EWMAC_62_256', EWMAC, {"fast_span": 64, "slow_span": 256}),
+            ('EWMAC_64_256', EWMAC, {"fast_span": 64, "slow_span": 256}),
             # (carry, {"span":system.n_bday_in_3m})
         ]
         self._forecast = {}
@@ -51,8 +52,6 @@ class Portfolio:
 
         return rule_list
 
-        [k for k, v in port.rules]
-
     def forecast(self, ticker_list=[], rule_list=[]):
         if not self._forecast:
             self._calc_forecast()
@@ -60,25 +59,56 @@ class Portfolio:
         ticker_list = self._all_tickers_if_empty(ticker_list)
         rule_list = self._all_rules_if_empty(rule_list)
 
-        res = { ticker:self._forecast[ticker][rule_list] for ticker in ticker_list}
+        res = { ticker:self._forecast[ticker][rule_list] for ticker in ticker_list }
 
         return res
 
-    def cost(self, ticker_list=[]):
+    def forecast_to_position(self, ticker_list=[], rule_list=[]):
         ticker_list = self._all_tickers_if_empty(ticker_list)
-        res = { ticker:self.ticker_instrument_map[ticker].cost_in_SR[ticker] for ticker in ticker_list }
+        rule_list = self._all_rules_if_empty(rule_list)
+
+        instrument_value_vol = { ticker:self.ticker_instrument_map[ticker].instrument_value_vol for ticker in ticker_list }
+        forecast = { ticker:self._forecast[ticker][rule_list] for ticker in ticker_list }
+
+        volatility_scalar = { ticker:system.vol_target_cash_daily / instrument_value_vol[ticker] for ticker in ticker_list }
+        position = { ticker: forecast[ticker] * volatility_scalar[ticker] / system.avg_abs_forecast for ticker in ticker_list }
+        return position
+
+    def turnover(self, ticker_list=[], rule_list=[]):
+        ticker_list = self._all_tickers_if_empty(ticker_list)
+        rule_list = self._all_rules_if_empty(rule_list)
+
+        one_way_turnover = self.forecast_to_position(ticker_list, rule_list).diff().abs()
+        return one_way_turnover
+
+    def standardised_cost(self, ticker_list=[]):
+        ticker_list = self._all_tickers_if_empty(ticker_list)
+        res = { ticker:self.ticker_instrument_map[ticker].cost_in_SR for ticker in ticker_list }
         return res
 
-    def forecast_weights(self, inst_name=None, rule=None, cost=False):
-        pass
+    def cost(self, ticker_list=[], rule_list=[]):
+        ticker_list = self._all_tickers_if_empty(ticker_list)
+        rule_list = self._all_rules_if_empty(rule_list)
+        one_way_turnover = self.turnover(ticker_list, rule_list)
+        standardised_cost = self.standardised_cost(ticker_list)
+        res = { ticker:one_way_turnover[ticker] * standardised_cost[ticker] for ticker in ticker_list }
+        return res
 
-    def position(self, inst_name=None, rule=None):
-        pass
+    def pnl(self, ticker_list=[], rule_list=[]):
+        ticker_list = self._all_tickers_if_empty(ticker_list)
+        rule_list = self._all_rules_if_empty(rule_list)
 
-    def pnl(self, inst_name=None, rule=None, cost=False):
-        pass
+        position = self.forecast_to_position(ticker_list, rule_list)
+        price_diff = { ticker:self.ticker_instrument_map[ticker].price_diff for ticker in ticker_list }
 
+        pnl = { ticker:position[ticker].multiply(price_diff[ticker]) for ticker in ticker_list }
+        return pnl
 
-    def weight(self, inst):
-        pass
+    def optimise_forecast(self, ticker_list=[], rule_list=[]):
+        ticker_list = self._all_tickers_if_empty(ticker_list)
+        rule_list = self._all_rules_if_empty(rule_list)
 
+        f = self.pnl(ticker_list, rule_list)
+        c = self.cost(ticker_list, rule_list)
+        
+        ### resample bla

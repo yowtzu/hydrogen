@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from hydrogen.instrument import Future, InstrumentFactory, Instrument
-from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_clipper, signal_scalar, forecast_to_position, cost, Portfolio
+from hydrogen.portfolio import  Portfolio
+from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_clipper, signal_scalar, forecast_to_position
 from hydrogen.portopt import port_opt
 import hydrogen.system as system
 
@@ -10,18 +11,11 @@ TICKERS = ["TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "
 
 port = Portfolio('Test Portfolio')
 port.set_instruments(TICKERS, as_of_date='20170301')
-port.forecast('TY1 Comdty')
 
-instrument_factory = InstrumentFactory()
+x = port.forecast('TY1 Comdty')
+bla = x['TY1 Comdty']
 
-instruments = { ticker:instrument_factory.create_instrument(ticker, as_of_date='20170301') for ticker in TICKERS }
-
-inst_vg = instruments["VG1 Index"]
-inst_ftse = instruments["Z 1 Index"]
-inst_es = instruments['ES1 Index']
-inst = instruments['ES1 Index']
-
-subset = [inst_vg, inst_ftse, inst_es]
+bla
 ### missout cont size
 cost_in_SR = pd.concat([ i.cost_in_SR for i in subset ], axis=1)
 

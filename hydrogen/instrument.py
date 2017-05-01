@@ -79,6 +79,10 @@ class Instrument:
         return self._unadjusted_ohlcv
 
     @property
+    def price_diff(self):
+        return self.ohlcv.CLOSE.diff()
+
+    @property
     def vol(self):
         return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, annualised=True)
 
