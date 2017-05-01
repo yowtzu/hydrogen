@@ -86,7 +86,8 @@ def mean_var_port_opt(means, sigma_mat):
 
     solution = minimize(port_SR_negative_riskfree, initial_weights, (means, sigma_mat), method='SLSQP', bounds=bounds,
                         constraints=constraint_dict, tol=0.00001)
-    return solution['x']
+
+    return solution['x'], solution
 
 
 def markotwitz_port_opt(return_df, use_equal_means=False, use_standardise_vol=False, annualised_target_vol=0.2):
@@ -103,8 +104,8 @@ def markotwitz_port_opt(return_df, use_equal_means=False, use_standardise_vol=Fa
     else:
         means = return_df.mean(axis=0)
 
-    return mean_var_port_opt(means, sigma_mat)
-
+    res, _ =  mean_var_port_opt(means, sigma_mat)
+    return res
 
 def bootstrap_port_opt(return_df, use_equal_means=False, use_standardise_vol=False, annualised_target_vol=0.2,
                        n_bootstrap_run=100, n_samples_per_run=256):

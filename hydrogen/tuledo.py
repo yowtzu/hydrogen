@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from hydrogen.instrument import Future, InstrumentFactory, Instrument
 from hydrogen.portfolio import  Portfolio
+from hydrogen.portfoliooptimiser import Optimiser
 from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_clipper, signal_scalar, forecast_to_position
 from hydrogen.portopt import port_opt
 import hydrogen.system as system
@@ -12,8 +13,13 @@ TICKERS = ["TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "
 port = Portfolio('Test Portfolio')
 port.set_instruments(TICKERS, as_of_date='20170301')
 
+opt = Optimiser('None')
+
 x = port.forecast('TY1 Comdty')
 bla = x['TY1 Comdty']
+port.pnl()['ES1 Index'].cumsum().plot()
+
+
 
 bla
 ### missout cont size
