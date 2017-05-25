@@ -23,12 +23,12 @@ FI_FUTURE_ROOT_TICKERS = ['OE', 'RX', 'UB', 'DU', 'G ', 'FV', 'TU',
 
 FI_FUTURE_FRONT_TICKERS = [ticker_root + '1 Comdty' for ticker_root in FI_FUTURE_ROOT_TICKERS]
 
-EQUITY_FUTURE_ROOT_TICKERS = ['ES', 'Z ', 'YBY', 'VG', 'GX', 'UX', 'FVS']
+EQUITY_FUTURE_ROOT_TICKERS = ['ES', 'Z ', 'YBY', 'VG', 'GX', 'UX', 'FVS', 'CF', 'AEX']
 EQUITY_FUTURE_FRONT_TICKERS = [ticker_root + '1 Index' for ticker_root in EQUITY_FUTURE_ROOT_TICKERS]
 
 COMDTY_FUTURE_ROOT_TICKERS = ['CL', 'CO', 'XB', 'HO', 'AX', 'NG', 'LA', 'HG',
                               'LL', 'LN', 'LX', 'GC', 'SI', 'W ', 'KW', 'C ',
-                              'S ', 'CT', 'SB', 'KC', 'CC', 'FC', 'LC', 'LH']
+                              'S ', 'CT', 'SB', 'KC', 'CC', 'FC', 'LC', 'LH', 'PL']
 
 COMDTY_FUTURE_FRONT_TICKERS = [ticker_root + '1 Comdty' for ticker_root in COMDTY_FUTURE_ROOT_TICKERS]
 
