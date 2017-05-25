@@ -12,4 +12,4 @@ universe_long["REGEX"] = [x[0] + y + '[0-9]+ ' + x[1] for x, y in zip(universe_l
 
 regex = "(" + '|'.join(universe_long.REGEX) + ")"
 filtered_static = static[static.TICKER.str.contains(regex)]
-filtered_static.to_csv('data/filtered_static.csv')
+filtered_static.to_csv('data/filtered_static.csv', index=False)

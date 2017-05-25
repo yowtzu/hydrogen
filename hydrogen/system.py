@@ -12,7 +12,7 @@ project_path = os.path.abspath(os.path.dirname(__file__))
 logger.debug(project_path)
 
 config_filename = os.path.join(project_path, '../data/config.csv')
-static_filename = os.path.join(project_path, '../data/static.csv')
+static_filename = os.path.join(project_path, '../data/filter_static.csv')
 ohlcv_path = os.path.join(project_path, '../data/ohlcv')
 
 cfg_filename = os.path.join(project_path, 'config.yml')
