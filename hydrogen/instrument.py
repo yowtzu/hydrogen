@@ -180,7 +180,7 @@ class Future(Instrument):
         self._cont_size = self._static_df.FUT_CONT_SIZE.values[0]
         self._tick_size = self._static_df.FUT_TICK_SIZE.values[0]
         self._ccy = self._static_df.CRNCY.values[0]
-        self._adj_info = self._get_adj_info(n_day=-3)
+        self._adj_info = self._get_adj_info(n_day=-1)
 
         instrument_factory = InstrumentFactory()
         self.fx = instrument_factory.create_instrument(self._ccy + 'USD Curncy')
@@ -236,7 +236,7 @@ class Future(Instrument):
     #        return exact_contract, prefix[:-1] + "[A-Z][0-9]+ " + suffix
 
     def _read_static_csv(self, ticker):
-        static_df = pd.read_csv(system.static_filename).rename(columns=self._BBG_FIELD_MAP)
+        static_df = pd.read_csv(system.filtered_static_filename).rename(columns=self._BBG_FIELD_MAP)
         static_df.FUT_NOTICE_FIRST = pd.to_datetime(static_df.FUT_NOTICE_FIRST).dt.date
 
         static_df_filter = static_df[static_df.TICKER == ticker]
@@ -316,5 +316,5 @@ class Future(Instrument):
 
         return df_no_adj, df, adj
 
-    #def _calc_annual_yield(self):
+    def _calc_annual_yield(self):
         return (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / (self._n_day_btw_contracts / system.n_day_in_year) /  (self.daily_price_vol * system.root_n_bday_in_year)

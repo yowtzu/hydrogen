@@ -107,7 +107,7 @@ class FutureTest(unittest.TestCase):
         assert_array_equal(tickers, future_Z_1_Index._static_df.sort_values(by="FUT_NOTICE_FIRST").TICKER.values)
 
     def test_read_daily_csv(self):
-        future_M6_Index = self.instrument_factory.create_instrument("Z M6 Index", as_of_date=pd.datetime(year=2016, month=3, day=21))
+        future_M6_Index = self.instrument_factory.create_instrument("Z M16 Index", as_of_date=pd.datetime(year=2016, month=3, day=21))
         logger.debug(future_M6_Index.ohlcv.index[0])
         self.assertEqual(future_M6_Index.ohlcv.index[0], pd.datetime(2015, 10, 28))
         self.assertEqual(future_M6_Index.ohlcv.index[-1], pd.datetime(2016, 3, 21))

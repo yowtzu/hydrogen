@@ -18,7 +18,7 @@ df_list = []
 for ticker in ALL_TICKERS:
     try:
         df = blp_service.BDP(ticker,
-                             ['NAME', 'FUT_NOTICE_FIRST', 'FUT_CONT_SIZE', 'FUT_TICK_SIZE', 'LAST_TRADEABLE_DT', 'CRNCY'],
+                             ['NAME', 'FUT_NOTICE_FIRST', 'FUT_CONT_SIZE', 'FUT_TICK_SIZE', 'FUT_GEN_MONTH', 'LAST_TRADEABLE_DT', 'CRNCY'],
                              )
         logging.debug(ticker)
         df_list.append(df)
