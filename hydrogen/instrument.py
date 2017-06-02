@@ -28,12 +28,15 @@ class InstrumentFactory():
         Returns:
             An instrument object of the given ticker with meta data and price data as of as_of_date.
         '''
+        logger.debug('Creating instrument {}'.format(ticker))
         prefix, suffix = ticker.rsplit(" ", maxsplit=1)
         class_map = {"Curncy": FX,
                      "Comdty": Future,
                      "Index": Future,
                      }
         return class_map[suffix](ticker, as_of_date)
+
+
 
 class Instrument:
     ''' Based class to model tradable instruments with bloomberg ticker serve as identifier '''
@@ -126,6 +129,12 @@ class Instrument:
     def cost_in_SR(self):
         return 2 * self.cost / (16 * self.instrument_currency_vol)
 
+    def calc_annual_yield(self):
+        ct_distance = self._static_df.MONTHS_BTW_CT.iloc[0]
+        annualised_sd_return = self.daily_price_vol * system.root_n_bday_in_year
+        annualised_yield = (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / ct_distance / annualised_sd_return
+        return annualised_yield.ffill()
+
 class FX(Instrument):
     ''' FX instrument
         Note that there is no volume for this type of instrument
@@ -186,13 +195,13 @@ class Future(Instrument):
         self.fx = instrument_factory.create_instrument(self._ccy + 'USD Curncy')
 
         if read_multiple_files:
-            self._unadjusted_ohlcv, self._ohlcv, self._adj = self._calc_ohlcv(self._adj_info, method='panama')
+            self._unadjusted_ohlcv, self._ohlcv, self._adj = self._calc_ohlcv(self._adj_info, method='panama', dropna=True)
 
             back_adj_info = self._adj_info.copy()
             back_adj_info.TICKER = back_adj_info.TICKER.shift(-1)
             back_adj_info.NEXT_TICKER = back_adj_info.NEXT_TICKER.shift(-1)
             back_adj_info = back_adj_info[:-1]
-            self._back_ohlcv_df = self._calc_ohlcv(back_adj_info, method='no_adj')[0]
+            self._back_ohlcv_df = self._calc_ohlcv(back_adj_info, method='no_adj', dropna=False)[0]
 
             # calculate the days between contract
             # n_day_btw_contracts = self._adj_dates.END_DATE.diff().shift(-2).dt.days
@@ -253,7 +262,7 @@ class Future(Instrument):
 
         return read_multiple_files, static_df
 
-    def _read_ohlcv(self, ticker, start_date, end_date, resample_method='1B'):
+    def _read_ohlcv(self, ticker, start_date, end_date, resample_method='1B', dropna=True):
         ohlcv_df = pd.DataFrame()
         filename = os.path.join(system.ohlcv_path, ticker + '.csv')
 
@@ -267,14 +276,15 @@ class Future(Instrument):
 
             #ohlcv_df.ffill(inplace=True)
             #ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
-            ohlcv_df = ohlcv_df.dropna(axis='index')
+            if dropna:
+                ohlcv_df = ohlcv_df.dropna(axis='index')
 
             if resample_method:
                 ohlcv_df = ohlcv_df.resample(resample_method).pad()
 
         return ohlcv_df
 
-    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama', resample_method='1B'):
+    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama', dropna=True):
 
         if method not in ['ratio', 'panama', 'no_adj']:
             raise ValueError('method is not valid: ' + method)
@@ -282,16 +292,13 @@ class Future(Instrument):
         if not isinstance(adj_dates, pd.DataFrame):
             raise ValueError('Calendar must be pandas DataFrame')
 
-        df_no_adj = pd.concat([self._read_ohlcv(row.TICKER, row.START_DATE, row.END_DATE)
+        df_no_adj = pd.concat([self._read_ohlcv(row.TICKER, row.START_DATE, row.END_DATE, dropna=dropna)
                         for _, row in adj_dates.iterrows()])
-
-        if resample_method:
-            df_no_adj = df_no_adj.resample(resample_method).pad()
 
         df = df_no_adj.copy()
         close = df.CLOSE
 
-        next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.END_DATE, row.END_DATE)
+        next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.START_DATE, row.END_DATE, dropna=False).ffill().tail(1)
                              for _, row in adj_dates.iterrows()])
 
         next_close = next_df.CLOSE
@@ -315,6 +322,3 @@ class Future(Instrument):
             adj[:] = 0
 
         return df_no_adj, df, adj
-
-    def _calc_annual_yield(self):
-        return (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / (self._n_day_btw_contracts / system.n_day_in_year) /  (self.daily_price_vol * system.root_n_bday_in_year)

@@ -2,20 +2,52 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from hydrogen.instrument import Future, InstrumentFactory, Instrument
-from hydrogen.portfolio import  Portfolio
+from hydrogen.portfolio import Portfolio
 from hydrogen.portfoliooptimiser import Optimiser
 from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_clipper, signal_scalar, forecast_to_position
 from hydrogen.portopt import port_opt
 import hydrogen.system as system
 
-TICKERS = ["TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "W 1 Comdty", 'Z 1 Index', "VG1 Index"]
+TICKERS = [ "S 1 Comdty", "TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "W 1 Comdty", 'Z 1 Index', "VG1 Index", "C 1 Comdty" ]
 
 port = Portfolio('Test Portfolio')
-port.set_instruments(TICKERS, as_of_date='20170301')
+port.set_instruments(TICKERS, as_of_date='20150701')
+f = port.forecast()
+f['S 1 Comdty'].ix[:, 3:7].plot()
+f['S 1 Comdty'].abs().mean() # approx 10
+f['S 1 Comdty'].isnull()["20060101":].sum() # should be zero
+
+###################### forecast
+ticker = port.ticker_instrument_map['TY1 Comdty']
+ticker.unadjusted_ohlcv.CLOSE['20150101':].plot()
+ticker._back_ohlcv_df.CLOSE['20150101':].plot()
+
+ticker = port.ticker_instrument_map['S 1 Comdty']
+(carry('carry_3m', inst=ticker, span=22))["201504"".plot()
+(ticker.unadjusted_ohlcv.CLOSE["20160101":]-ticker._back_ohlcv_df.CLOSE["20160101":]).ewm(1).mean().plot()
+
+(ticker.unadjusted_ohlcv.CLOSE["20160101":]-ticker._back_ohlcv_df.CLOSE["20160101":]).ewm(22).mean().plot()
+
+ticker = port.ticker_instrument_map['CL1 Comdty']
+signal_scalar(carry('carry_3m', inst=ticker, span=64)).plot()
+ticker = port.ticker_instrument_map['TY1 Comdty']
+signal_scalar(carry('carry_3m', inst=ticker)['20150101':].plot()
+
+f['C 1 Comdty']['20150501':].ix[:,3:6].plot()
+    .plot()
+f['S 1 Comdty']["EWMAC_16_64"]['20150101':].plot()
+ticker = port.ticker_instrument_map['C 1 Comdty']
+ticker.unadjusted_ohlcv.CLOSE['20150101':].plot()
+ticker.unadjusted_ohlcv.CLOSE.plot()
+
+ticker._adj_info
 
 opt = Optimiser('None')
 
-x = port.forecast('TY1 Comdty')
+x = port.forecast('C 1 Comdty')
+
+ticker.ohlcv[:'20121203']
+ticker.ohlcv.CLOSE.plot()
 bla = x['TY1 Comdty']
 port.pnl()['ES1 Index'].cumsum().plot()
 

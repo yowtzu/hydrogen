@@ -29,6 +29,14 @@ def EWMAC(rulename: str, inst: Instrument, fast_span, slow_span):#w_span_pair=[(
     signal = signal.rename(rulename)
     return signal
 
+
+def carry(rulename: str, inst: Instrument, span):
+    signal = (inst.calc_annual_yield())
+    signal = signal.ewm(span=span).mean()
+    signal = signal.rename(rulename)
+    return signal
+
+
 def signal_scalar(signal: pd.Series, target_abs_forecast=system.target_abs_forecast):
     """
     
@@ -37,7 +45,7 @@ def signal_scalar(signal: pd.Series, target_abs_forecast=system.target_abs_forec
     :return: pd.Series
     """
     # time series average
-    scaling_factor = target_abs_forecast / signal.abs().rolling(system.n_bday_in_year).mean()
+    scaling_factor = target_abs_forecast / signal.abs().ewm(span=system.n_bday_in_year).mean()
     signal = scaling_factor * signal
     return signal
 
@@ -69,21 +77,14 @@ def bla(inst: Instrument, position: pd.Series):
 
     no_trade_per_year = position.ffill().diff().abs().rolling(window=system.n_bday_in_3m).sum() * 4
     avg_abs_no_trade = position.abs().rolling(window=system.n_bday_in_3m).sum() * 4
-    #no_trade_per_year = positions.ffill().diff().abs()
-    #avg_abs_no_trade = positions.abs()
+    # no_trade_per_year = positions.ffill().diff().abs()
+    # avg_abs_no_trade = positions.abs()
     t = no_trade_per_year / avg_abs_no_trade
-    #print(t.sum())
+    # print(t.sum())
     return t
 
 def signal_mixer(signal: pd.DataFrame):
     return port_opt(signal, 'bootstrap', 'expanding', use_standardise_vol=True, n_bootstrap_run=1024)
-
-def carry(instrument: hydrogen.instrument.Instrument, span=system.n_bday_in_3m, front_contract=False):
-    ts = instrument._calc_annual_yield()
-    signal = ts.ewm(span = span).mean()
-    if front_contract:
-        signal = -signal
-    return signal
 
 
 def breakout(instrument: hydrogen.instrument.Instrument, window: int, span: int = None):

@@ -1,7 +1,7 @@
 import pandas as pd
 from collections import OrderedDict
 from hydrogen.instrument import InstrumentFactory
-from hydrogen.trading_rules import signal_scalar, signal_clipper, EWMAC
+from hydrogen.trading_rules import signal_scalar, signal_clipper, EWMAC, carry
 import hydrogen.system as system
 
 class Portfolio:
@@ -15,7 +15,7 @@ class Portfolio:
             ('EWMAC_16_64', EWMAC, {"fast_span": 16, "slow_span": 64} ) ,
             ('EWMAC_32_128', EWMAC, {"fast_span": 32, "slow_span": 128}),
             ('EWMAC_64_256', EWMAC, {"fast_span": 64, "slow_span": 256}),
-            # (carry, {"span":system.n_bday_in_3m})
+            ('carry', carry, {"span":system.n_bday_in_3m/3})
         ]
         self._forecast = {}
 
