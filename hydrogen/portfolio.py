@@ -15,7 +15,7 @@ class Portfolio:
             ('EWMAC_16_64', EWMAC, {"fast_span": 16, "slow_span": 64} ) ,
             ('EWMAC_32_128', EWMAC, {"fast_span": 32, "slow_span": 128}),
             ('EWMAC_64_256', EWMAC, {"fast_span": 64, "slow_span": 256}),
-            ('carry', carry, {"span":system.n_bday_in_3m/3})
+            ('carry', carry, {"span":32})
         ]
         self._forecast = {}
 
@@ -72,6 +72,7 @@ class Portfolio:
         forecast = self.forecast(ticker_list, rule_list)
 
         position = { ticker: forecast[ticker].multiply(volatility_scalar[ticker], axis=0) / system.avg_abs_forecast for ticker in ticker_list }
+
         return position
 
     def turnover(self, ticker_list=[], rule_list=[]):

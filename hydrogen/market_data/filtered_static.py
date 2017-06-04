@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from hydrogen.system import universe_filename, static_filename, filtered_static_filename
 import hydrogen.system as system
@@ -19,4 +20,5 @@ filtered_static
 filtered_static = filtered_static.merge(universe, on='ROOT_TICKER')
 filtered_static["MONTHS_BTW_CT"] = system.n_month_in_year/filtered_static.CT_LIST.apply(len)/12
 filtered_static.drop('CT_LIST', axis=1, inplace=True)
+filtered_static['ROLL_DT'] = np.minimum(filtered_static.LAST_TRADEABLE_DT, filtered_static.FUT_NOTICE_FIRST)
 filtered_static.to_csv(filtered_static_filename, index=False)

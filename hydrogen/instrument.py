@@ -46,7 +46,7 @@ class Instrument:
                       'PX_HIGH': 'HIGH',
                       'PX_LAST': 'CLOSE',
                       'PX_VOLUME': 'VOLUME',
-                      'FUT_NOTICE_FIRST': 'FUT_NOTICE_FIRST',
+                      'ROLL_DT': 'ROLL_DT',
                       }
 
     def __init__(self, ticker: str, as_of_date):
@@ -227,9 +227,9 @@ class Future(Instrument):
                 return a pd.DataFrame of five columns, TICKER, FUT_NOTICE_FIRST, START_DATE, END_DATE, NEXT_TICKER
         '''
 
-        roll_dates = self._static_df[["TICKER", "FUT_NOTICE_FIRST"]].copy()
-        roll_dates['START_DATE'] = roll_dates.FUT_NOTICE_FIRST.apply(lambda x: x + (1 + n_day) * BDay()).shift(1).fillna(pd.to_datetime('20000101').date()).dt.date
-        roll_dates['END_DATE'] = roll_dates.FUT_NOTICE_FIRST.apply(lambda x: x + n_day * BDay()).dt.date
+        roll_dates = self._static_df[["TICKER", "ROLL_DT"]].copy()
+        roll_dates['START_DATE'] = roll_dates.ROLL_DT.apply(lambda x: x + (1 + n_day) * BDay()).shift(1).fillna(pd.to_datetime('20000101').date()).dt.date
+        roll_dates['END_DATE'] = roll_dates.ROLL_DT.apply(lambda x: x + n_day * BDay()).dt.date
         roll_dates['NEXT_TICKER'] = roll_dates.TICKER.shift(-1).fillna('')
         return roll_dates
 
@@ -246,7 +246,7 @@ class Future(Instrument):
 
     def _read_static_csv(self, ticker):
         static_df = pd.read_csv(system.filtered_static_filename).rename(columns=self._BBG_FIELD_MAP)
-        static_df.FUT_NOTICE_FIRST = pd.to_datetime(static_df.FUT_NOTICE_FIRST).dt.date
+        static_df.ROLL_DT = pd.to_datetime(static_df.ROLL_DT).dt.date
 
         static_df_filter = static_df[static_df.TICKER == ticker]
 
@@ -258,7 +258,7 @@ class Future(Instrument):
         else:
             read_multiple_files = False
 
-        static_df = static_df_filter.sort_values(by='FUT_NOTICE_FIRST')
+        static_df = static_df_filter.sort_values(by='ROLL_DT')
 
         return read_multiple_files, static_df
 
@@ -284,7 +284,7 @@ class Future(Instrument):
 
         return ohlcv_df
 
-    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama', dropna=True):
+    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama', resample_method='1B', dropna=True):
 
         if method not in ['ratio', 'panama', 'no_adj']:
             raise ValueError('method is not valid: ' + method)
@@ -295,12 +295,17 @@ class Future(Instrument):
         df_no_adj = pd.concat([self._read_ohlcv(row.TICKER, row.START_DATE, row.END_DATE, dropna=dropna)
                         for _, row in adj_dates.iterrows()])
 
+        # if the day fall at the edge of each contract, resample within read ohlcv does not handle that
+        if resample_method:
+            df_no_adj = df_no_adj.resample(resample_method).pad()
+
         df = df_no_adj.copy()
         close = df.CLOSE
 
-        next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.START_DATE, row.END_DATE, dropna=False).ffill().tail(1)
+        next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.END_DATE, row.END_DATE, dropna=False)
                              for _, row in adj_dates.iterrows()])
 
+        print(next_df)
         next_close = next_df.CLOSE
 
         if method == 'panama':
