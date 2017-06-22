@@ -41,7 +41,7 @@ class Optimiser():
             return refs[np.argmin(np.abs(np.repeat(xs.reshape(-1, 1), len(refs), axis=1) - refs), 1)]
 
         def weights_lookup(corr_values):
-            cor_to_weights = pd.read_csv("~/hydrogen/playground/data/cor_to_weights.csv",
+            cor_to_weights = pd.read_csv("~/hydrogen/tests/data/cor_to_weights.csv",
                                          index_col=('c1', 'c2', 'c3'))
             indices = round_to_nearest(corr_values)
             return cor_to_weights.ix[indices[0]].ix[indices[1]].ix[indices[2]].values
@@ -55,6 +55,25 @@ class Optimiser():
         else:
             raise NotImplementedError('This line should never be reached')
 
+    def generate_fitting_period(self, return_df, data_split_method, n_roll_days=256):
+        ''' Assume return_df has daily index '''
+        supported_method = ['in_sample', 'rolling', 'expanding']
+
+        if data_split_method == 'in_sample':
+            df_list = [return_df]
+        elif data_split_method == 'rolling':
+            df_list = [return_df[start_date:end_date] for start_date, end_date
+                       in zip(return_df.index[:-n_roll_days + 1], return_df.index[n_roll_days - 1:])]
+        elif data_split_method == 'expanding':
+            df_list = [return_df[:end_date] for end_date
+                       in return_df.index[n_roll_days - 1:]]
+        else:
+            raise Exception(
+                'Unregonised data split method: {method}. Supported methods are {supported_method}.'.format(
+                    method=data_split_method,
+                    supported_method=supported_method))
+        return df_list
+
     def mean_var_port_opt(self, means, sigma_mat):
         n_assets = len(means)
 
@@ -63,13 +82,11 @@ class Optimiser():
         bounds = [(0.0, 1.0)] * n_assets
         constraint_dict = [{'type': 'eq', 'fun': lambda weights: 1 - sum(weights)}]
 
-        risk_free_rates = np.zeros(n_assets)
-        mul_factors = np.ones(n_assets)
+        self.solution = minimize(self.port_SR_negative_riskfree, initial_weights, (means, sigma_mat), method='SLSQP',
+                                 bounds=bounds,
+                                 constraints=constraint_dict, tol=0.00001)
 
-        solution = minimize(self.port_SR_negative_riskfree, initial_weights, (means, sigma_mat), method='SLSQP',
-                            bounds=bounds,
-                            constraints=constraint_dict, tol=0.00001)
-        return solution['x']
+        return self.solution['x'], self.solution
 
     def markotwitz_port_opt(self, return_df, use_equal_means=False, use_standardise_vol=False, annualised_target_vol=0.2):
         n_assets = return_df.shape[1]
@@ -85,51 +102,29 @@ class Optimiser():
         else:
             means = return_df.mean(axis=0)
 
-        return self.mean_var_port_opt(means, sigma_mat)
+        res, _ = self.mean_var_port_opt(means, sigma_mat)
+        return res
 
     def bootstrap_port_opt(self, return_df, use_equal_means=False, use_standardise_vol=False, annualised_target_vol=0.2,
                            n_bootstrap_run=100, n_samples_per_run=256):
         ''' Monte_carlo number of bootstrap, not block bootstrap '''
         weights_mat = np.array(
             [self.markotwitz_port_opt(return_df.sample(n=n_samples_per_run, replace=True), use_equal_means,
-                                 use_standardise_vol, annualised_target_vol) for _ in
+                                      use_standardise_vol, annualised_target_vol) for _ in
              range(n_bootstrap_run)])
-
         return (weights_mat.T / weights_mat.sum(axis=1)).mean(axis=1)
 
-    def port_opt(self,  return_df, fit_method, data_split_method, n_roll_days=256, step=22, **kwargs):
-        '''
-        
-        :param return_df: 
-        :param fit_method: 
-        :param data_split_method: 
-        :param n_roll_days: 
-        :param step: 
-        :param kwargs: 
-        :return:
-
-        Example:
-        res = port_opt(daily_df, 'one_period', 'in_sample')
-        res1 = port_opt(daily_df, 'one_period', 'in_sample', use_standardise_vol=True)
-        res2 = port_opt(daily_df, 'one_period', 'in_sample', use_equal_means=True, use_standardise_vol=True)
-        res3 = port_opt(daily_df, 'bootstrap', 'in_sample', use_standardise_vol=True , n_bootstrap_run=1024)
-        res4 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True)
-        res5 = port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True, n_roll_days=256*5)
-        res6 = port_opt(daily_df, 'one_period', 'expanding', use_standardise_vol=True)
-        res7 = port_opt(daily_df, 'bootstrap', 'expanding', use_standardise_vol=True, n_bootstrap_run=1024)
-
-        '''
-
+    def port_opt(self, return_df, fit_method, data_split_method, n_roll_days=256, step=22, **kwargs):
         df_list = self.generate_fitting_period(return_df, data_split_method, n_roll_days)
 
         weights_df_list = []
 
         port_opt_helper = {'handcrafted': self.handcrafted_port_opt,
-                       'one_period': self.markotwitz_port_opt,
-                       'bootstrap': self.bootstrap_port_opt}[fit_method]
+                           'one_period': self.markotwitz_port_opt,
+                           'bootstrap': self.bootstrap_port_opt}[fit_method]
         for df in df_list[::step]:
             print('Optimising portfolio using data between {start_date} and {end_date}'.format(start_date=df.index[0],
-                                                                                           end_date=df.index[-1]))
+                                                                                               end_date=df.index[-1]))
 
             weights = port_opt_helper(df, **kwargs)
 
@@ -139,20 +134,22 @@ class Optimiser():
 
         return pd.concat(weights_df_list)
 
-    def generate_fitting_period(self, return_df, data_split_method, n_roll_days=256):
-        ''' Assume return_df has daily index '''
-        supported_method = ['in_sample', 'rolling', 'expanding']
 
-        if data_split_method == 'in_sample':
-            df_list = [return_df]
-        elif data_split_method == 'rolling':
-            df_list = [return_df[start_date:end_date] for start_date, end_date in zip(return_df.index[:-n_roll_days + 1], return_df.index[n_roll_days - 1:] )]
-        elif data_split_method == 'expanding':
-            df_list = [return_df[:end_date] for end_date
-                       in return_df.index[n_roll_days - 1:]]
-        else:
-            raise Exception(
-                'Unregonised data split method: {method}. Supported methods are {supported_method}.'.format(
-                    method=data_split_method,
-                    supported_method=supported_method))
-        return df_list
+if __name__ == '__main__':
+    fileName = 'hydrogen/tests/data/three_assets.csv'
+
+    daily_df = pd.read_csv(fileName, index_col=['date'], parse_dates=['date'])
+    daily_df = daily_df.fillna(0)  #
+
+    ## Down-sample to weekly
+    weekly_df = daily_df.resample('1W').sum()
+
+    opt = Optimiser(None)
+    resa = opt.port_opt(daily_df, 'one_period', 'in_sample')
+    res1a = opt.port_opt(daily_df, 'one_period', 'in_sample', use_standardise_vol=True)
+    res2a = opt.port_opt(daily_df, 'one_period', 'in_sample', use_equal_means=True, use_standardise_vol=True)
+    res3a = opt.port_opt(daily_df, 'bootstrap', 'in_sample', use_standardise_vol=True, n_bootstrap_run=1024)
+    res4a = opt.port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True)
+    res5a = opt.port_opt(daily_df, 'one_period', 'rolling', use_standardise_vol=True, n_roll_days=256 * 5)
+    res6a = opt.port_opt(daily_df, 'one_period', 'expanding', use_standardise_vol=True)
+    res7a = opt.port_opt(daily_df, 'bootstrap', 'expanding', use_standardise_vol=True, n_bootstrap_run=1024)

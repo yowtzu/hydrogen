@@ -6,7 +6,8 @@ import hydrogen.system as system
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-def vol(price_df: pd.DataFrame, annualised, method: str = 'YZ', **kwargs) -> pd.TimeSeries:
+
+def vol(price_df: pd.DataFrame, annualised, method: str = 'YZ', **kwargs) -> pd.Series:
     """
     
     Args:
@@ -31,7 +32,7 @@ def vol(price_df: pd.DataFrame, annualised, method: str = 'YZ', **kwargs) -> pd.
     return res
 
 
-def _vol_std_dev(price_df: pd.DataFrame, ewm=False, **kwargs) -> pd.TimeSeries:
+def _vol_std_dev(price_df: pd.DataFrame, ewm=False, **kwargs) -> pd.Series:
     price_df["CLOSE_PREV"] = price_df.CLOSE.shift(1)
     log_return = np.log(price_df.CLOSE / price_df.CLOSE_PREV)
 

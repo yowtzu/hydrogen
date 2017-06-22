@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from collections import OrderedDict
 from hydrogen.instrument import InstrumentFactory
@@ -18,13 +19,14 @@ class Portfolio:
             ('carry', carry, {"span":32})
         ]
         self._forecast = {}
+        self._position = {}
 
     def set_instruments(self, ticker_list: list, as_of_date):
         instrument_factory = InstrumentFactory()
         self.ticker_instrument_map = { ticker:instrument_factory.create_instrument(ticker, as_of_date=as_of_date) for ticker in ticker_list }
 
     def _calc_forecast(self, clip=False):
-        res = OrderedDict()
+        res = {}
         for ticker, inst in self.ticker_instrument_map.items():
             forecasts = [ signal_scalar(rule(rulename, inst, **kargs)) for rulename, rule, kargs in self.rules ]
             if clip:
@@ -60,56 +62,130 @@ class Portfolio:
         rule_list = self._all_rules_if_empty(rule_list)
 
         res = { ticker:self._forecast[ticker][rule_list] for ticker in ticker_list }
-
         return res
 
-    def forecast_to_position(self, ticker_list=[], rule_list=[]):
+    def _calc_position(self):
+        res = {}
+
+        ticker_list = self._forecast.keys()
+        volatility_scalar = { ticker:system.vol_target_cash_daily / self.ticker_instrument_map[ticker].instrument_value_vol for ticker in ticker_list }
+
+        position = {ticker: self._forecast[ticker].multiply(volatility_scalar[ticker], axis=0) / system.avg_abs_forecast
+                    for ticker in ticker_list}
+
+        self._position = position
+
+    def position(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False):
+        def apply_buffer_one_signal(opt_pos, trade_to_edge, round_position):
+            """
+            Apply a buffer to a position
+            If position is outside the buffer, we either trade to the edge of the
+            buffer, or to the optimal
+            If we're rounding positions, then we floor and ceiling the buffers.
+            :param opt_pos: optimal position
+            :type opt_pos: pd.Series
+            :param trade_to_edge: Trade to the edge (TRue) or the optimal (False)
+            :type trade_to_edge: bool
+            :param round_position: Produce rounded positions
+            :type round_position: bool
+            :returns: pd.Series
+            """
+
+            def apply_buffer_one_signal_one_period(previous_pos, opt_pos, lower_limit, upper_limit, trade_to_edge):
+                """
+                Apply a buffer to a position, single period
+                If position is outside the buffer, we either trade to the edge of the
+                buffer, or to the optimal
+                :param previous_pos: last position we had
+                :type previous_pos: float
+                :param opt_pos: ideal position
+                :type opt_pos: float
+                :param upper_limit: top of buffer
+                :type upper_limit: float
+                :param lower_limit: bottom of buffer
+                :type lower_limit: float
+                :param trade_to_edge: Trade to the edge (TRue) or the optimal (False)
+                :type trade_to_edge: bool
+                :returns: float
+                """
+
+                if np.isnan(upper_limit) or np.isnan(lower_limit) or np.isnan(opt_pos):
+                    return previous_pos
+
+                if previous_pos > upper_limit:
+                    if trade_to_edge:
+                        return upper_limit
+                    else:
+                        return opt_pos
+                elif previous_pos < lower_limit:
+                    if trade_to_edge:
+                        return lower_limit
+                    else:
+                        return opt_pos
+                else:
+                    return previous_pos
+
+            buffer = opt_pos.abs() * 0.1
+            lower_limit = opt_pos - buffer
+            upper_limit = opt_pos + buffer
+
+            if round_position:
+                opt_pos = opt_pos.round()
+                upper_limit = upper_limit.round()
+                lower_limit = lower_limit.round()
+
+            current_position = 0.0
+            buffered_position_list = []
+
+            for x, y, z in zip(opt_pos, lower_limit, upper_limit):
+                current_position = apply_buffer_one_signal_one_period(current_position, x, y, z, trade_to_edge)
+                buffered_position_list.append(current_position)
+
+            buffered_position = pd.Series(buffered_position_list, index=opt_pos.index)
+            buffered_position[opt_pos.isnull()] = np.nan
+            return buffered_position
+
+        if not self._position:
+            self._calc_position()
+
         ticker_list = self._all_tickers_if_empty(ticker_list)
         rule_list = self._all_rules_if_empty(rule_list)
 
-        volatility_scalar = { ticker:system.vol_target_cash_daily / self.ticker_instrument_map[ticker].instrument_value_vol for ticker in ticker_list }
+        position = {ticker: self._position[ticker][rule_list] for ticker in ticker_list}
 
-        forecast = self.forecast(ticker_list, rule_list)
-
-        position = { ticker: forecast[ticker].multiply(volatility_scalar[ticker], axis=0) / system.avg_abs_forecast for ticker in ticker_list }
+        if buffered_position:
+            position = {ticker: df.apply(apply_buffer_one_signal, args=(trade_to_edge, round_position)) for ticker, df
+                        in position.items()}
 
         return position
 
-    def turnover(self, ticker_list=[], rule_list=[]):
-        ticker_list = self._all_tickers_if_empty(ticker_list)
-        rule_list = self._all_rules_if_empty(rule_list)
-
-        one_way_turnover = { key:value.diff().abs() for key, value in self.forecast_to_position(ticker_list, rule_list).items() }
+    def turnover(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False):
+        position = self.position(ticker_list, rule_list, buffered_position, trade_to_edge, round_position)
+        one_way_turnover = {key: value.diff().abs() for key, value in position.items()}
         return one_way_turnover
 
-    def standardised_cost(self, ticker_list=[]):
+    def cost(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False):
         ticker_list = self._all_tickers_if_empty(ticker_list)
-        res = { ticker:self.ticker_instrument_map[ticker].cost_in_SR for ticker in ticker_list }
+        rule_list = self._all_rules_if_empty(rule_list)
+        one_way_turnover = self.turnover(ticker_list, rule_list, buffered_position, trade_to_edge, round_position)
+        cost = {ticker: self.ticker_instrument_map[ticker].cost for ticker in ticker_list}
+        res = {ticker: one_way_turnover[ticker].multiply(cost[ticker], axis=0) for ticker in ticker_list}
         return res
 
-    def cost(self, ticker_list=[], rule_list=[]):
-        ticker_list = self._all_tickers_if_empty(ticker_list)
-        rule_list = self._all_rules_if_empty(rule_list)
-        one_way_turnover = self.turnover(ticker_list, rule_list)
-        standardised_cost = self.standardised_cost(ticker_list)
-        res = { ticker:one_way_turnover[ticker].multiply(standardised_cost[ticker], axis=0) for ticker in ticker_list }
-        return res
-
-    def pnl(self, ticker_list=[], rule_list=[]):
+    def pnl(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False,
+            delay=0):
         ticker_list = self._all_tickers_if_empty(ticker_list)
         rule_list = self._all_rules_if_empty(rule_list)
 
-        position = self.forecast_to_position(ticker_list, rule_list)
-        price_diff = { ticker:self.ticker_instrument_map[ticker].price_diff for ticker in ticker_list }
+        position = self._position
+        pnl_one_contract = {
+            ticker: self.ticker_instrument_map[ticker].price_diff * self.ticker_instrument_map[ticker].cont_size for
+            ticker
+            in ticker_list}
+        gross_pnl = {ticker: position[ticker].shift(delay).multiply(pnl_one_contract[ticker], axis=0) for ticker in
+                     ticker_list}
 
-        pnl = { ticker:position[ticker].multiply(price_diff[ticker], axis=0) for ticker in ticker_list }
-        return pnl
+        cost = self.cost(ticker_list, rule_list, buffered_position, trade_to_edge, round_position)
+        net_pnl = {ticker: gross_pnl[ticker].add(-cost[ticker]) for ticker in ticker_list}
 
-    def optimise_forecast(self, ticker_list=[], rule_list=[]):
-        ticker_list = self._all_tickers_if_empty(ticker_list)
-        rule_list = self._all_rules_if_empty(rule_list)
-
-        f = self.pnl(ticker_list, rule_list)
-        c = self.cost(ticker_list, rule_list)
-        
-        ### resample bla
+        return gross_pnl, cost, net_pnl

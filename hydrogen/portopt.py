@@ -41,7 +41,7 @@ def handcrafted_port_opt(return_df, use_standardise_vol=False, annualised_target
         return refs[np.argmin(np.abs(np.repeat(xs.reshape(-1, 1), len(refs), axis=1) - refs), 1)]
 
     def weights_lookup(corr_values):
-        cor_to_weights = pd.read_csv("~/hydrogen/playground/data/cor_to_weights.csv",
+        cor_to_weights = pd.read_csv("~/hydrogen/tests/data/cor_to_weights.csv",
                                      index_col=('c1', 'c2', 'c3'))
         indices = round_to_nearest(corr_values)
         return cor_to_weights.ix[indices[0]].ix[indices[1]].ix[indices[2]].values
