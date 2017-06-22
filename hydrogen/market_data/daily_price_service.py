@@ -5,7 +5,7 @@ import os
 from hydrogen.system import config_filename, static_filename, ohlcv_path
 from datetime import timedelta
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 OHLCV_FIELDS = ['PX_OPEN', 'PX_HIGH', 'PX_LOW', 'PX_LAST', 'PX_VOLUME']
@@ -16,7 +16,7 @@ config = pd.read_csv(config_filename, index_col='TICKER', parse_dates=[2, 3])
 blp_service = blp.BLPService()
 
 for ticker, row in config.iterrows():
-    logger.debug('Working Ticker: %s', ticker)
+    logger.info('Working Ticker: %s', ticker)
     file_name = os.path.join(ohlcv_path, ticker + '.csv')
     daily_df = pd.DataFrame(columns=['DATE'] + OHLCV_FIELDS).set_index('DATE')
     start_date = row.START_DATE
@@ -36,7 +36,7 @@ for ticker, row in config.iterrows():
     try:
         new_df = blp_service.BDH(ticker, OHLCV_FIELDS, start_date, end_date)
         # flatten the column
-        print(new_df)
+        logging.debug(new_df)
         new_df.columns = new_df.columns.get_level_values(1)
         new_df.index.name = 'DATE'
         daily_df = daily_df.append(new_df)
