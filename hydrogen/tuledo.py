@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import logging
 import numpy as np
 import pandas as pd
 from hydrogen.instrument import Future, InstrumentFactory, Instrument
@@ -10,11 +11,18 @@ import hydrogen.system as system
 import blp.blp as blp
 
 bb = blp.BLPService()
-ticker = 'TY1 Comdty'
-new_df = pd.read_csv('data/tests/{ticker}.csv'.format(ticker=ticker), index_col=0, parse_dates=True)
-factory = InstrumentFactory()
-ty = factory.create_instrument(ticker, as_of_date='20150101')
+logger = logging.getLogger(__name__)
+OHLCV_FIELDS = ['PX_OPEN', 'PX_HIGH', 'PX_LOW', 'PX_LAST', 'PX_VOLUME']
+ticker = 'Z 1 Index'
+df = bb.BDH(ticker, OHLCV_FIELDS, '20050101', '20150101')
 
+df
+new_df = pd.read_csv('data/tests/{ticker}.csv'.format(ticker=ticker), index_col=0, parse_dates=True)
+
+factory = InstrumentFactory()
+
+ty = factory.create_instrument(ticker, as_of_date='20150101')
+ty.ohlcv.tail()
 pd.concat([ty.unadjusted_ohlcv.CLOSE, new_df.CLOSE, ty.ohlcv.CLOSE], axis=1).dropna().head(33)
 
 pd.concat([ty.unadjusted_ohlcv.CLOSE, new_df.CLOSE, ty.ohlcv.CLOSE], axis=1).plot()
