@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 import pandas as pd
 import os
 import hydrogen.system as system
@@ -121,9 +122,9 @@ class Instrument:
 
     @property
     def cost(self):
-        execution_cost = self.tick_size / 2 * self.cont_size
-        ticker_cost = execution_cost # TODO: assumption
-        return execution_cost + ticker_cost
+        spread_cost = self.tick_size / 2 * self.cont_size
+        ticker_cost = 0
+        return spread_cost + ticker_cost
 
     @property
     def cost_in_SR(self):
@@ -157,7 +158,7 @@ class FX(Instrument):
 
         self._cr_ohlcv = self._read_ohlcv(carry_ticker)
 
-    def _read_ohlcv(self, filename, resample_method='1B'):
+    def _read_ohlcv(self, filename):
         ohlcv_df = pd.DataFrame()
 
         filename = os.path.join(system.ohlcv_path, self._ticker + '.csv')
@@ -169,8 +170,8 @@ class FX(Instrument):
             # only see data up to as of date (inclusively)
             ohlcv_df = ohlcv_df[:self._as_of_date]
 
-            if resample_method:
-                ohlcv_df = ohlcv_df.resample(resample_method).pad()
+            # if resample_method:
+            ohlcv_df = ohlcv_df.resample('1B').pad()
 
         return ohlcv_df
 
@@ -211,7 +212,8 @@ class Future(Instrument):
         else:
             self._unadjusted_ohlcv = self._read_ohlcv(self._static_df.TICKER.iloc[0],
                                                       self._adj_info.START_DATE.iloc[0],
-                                                      self._adj_info.END_DATE.iloc[0])
+                                                      self._adj_info.END_DATE.iloc[0],
+                                                      resample=False)
             self._ohlcv = self.unadjusted_ohlcv
 
     @property
@@ -228,7 +230,9 @@ class Future(Instrument):
         '''
 
         roll_dates = self._static_df[["TICKER", "ROLL_DT"]].copy()
-        roll_dates['START_DATE'] = roll_dates.ROLL_DT.apply(lambda x: x + (1 + n_day) * BDay()).shift(1).fillna(pd.to_datetime('20000101').date()).dt.date
+        roll_dates['START_DATE'] = roll_dates.ROLL_DT.apply(lambda x: x + (1 + n_day) * BDay()).shift(1).fillna(
+            pd.to_datetime('20050101').date()).dt.date
+        roll_dates['START_DATE'] = np.maximum(pd.to_datetime('20050101').date(), roll_dates['START_DATE'])
         roll_dates['END_DATE'] = roll_dates.ROLL_DT.apply(lambda x: x + n_day * BDay()).dt.date
         roll_dates['NEXT_TICKER'] = roll_dates.TICKER.shift(-1).fillna('')
         return roll_dates
@@ -262,29 +266,35 @@ class Future(Instrument):
 
         return read_multiple_files, static_df
 
-    def _read_ohlcv(self, ticker, start_date, end_date, resample_method='1B', dropna=True):
+    def _read_ohlcv(self, ticker, start_date, end_date, resample=True, dropna=True):
         ohlcv_df = pd.DataFrame()
         filename = os.path.join(system.ohlcv_path, ticker + '.csv')
 
         if os.path.exists(filename):
             ohlcv_df = pd.read_csv(filename, index_col='DATE').rename(columns=self._BBG_FIELD_MAP)
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
-            ohlcv_df = ohlcv_df[start_date:end_date]
 
-            # only see data up to as of date (inclusively)
-            ohlcv_df = ohlcv_df[:self._as_of_date]
+            if not ohlcv_df.empty:
+                if resample:
+                    date_rack = pd.bdate_range(start_date, end_date)
+                    ohlcv_df = ohlcv_df.asof(date_rack)
+                else:
+                    ohlcv_df = ohlcv_df[start_date:end_date]
 
-            #ohlcv_df.ffill(inplace=True)
-            #ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
+                # only see data up to as of date (inclusively)
+                ohlcv_df = ohlcv_df[:self._as_of_date]
+
+                # ohlcv_df.ffill(inplace=True)
+                # ohlcv_df = ohlcv_df[ohlcv_df.HIGH.notnull() & ohlcv_df.LOW.notnull() & ohlcv_df.VOLUME.notnull()]
+
+            # if resample_method:
+            #    ohlcv_df = ohlcv_df.resample(resample_method).pad()
             if dropna:
                 ohlcv_df = ohlcv_df.dropna(axis='index')
 
-            if resample_method:
-                ohlcv_df = ohlcv_df.resample(resample_method).pad()
-
         return ohlcv_df
 
-    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama', resample_method='1B', dropna=True):
+    def _calc_ohlcv(self, adj_dates: pd.DataFrame = None, method='panama', dropna=True):
 
         if method not in ['ratio', 'panama', 'no_adj']:
             raise ValueError('method is not valid: ' + method)
@@ -296,8 +306,8 @@ class Future(Instrument):
                         for _, row in adj_dates.iterrows()])
 
         # if the day fall at the edge of each contract, resample within read ohlcv does not handle that
-        if resample_method:
-            df_no_adj = df_no_adj.resample(resample_method).pad()
+        # if resample_method:
+        #    df_no_adj = df_no_adj.resample(resample_method).pad()
 
         df = df_no_adj.copy()
         close = df.CLOSE
@@ -305,7 +315,6 @@ class Future(Instrument):
         next_df = pd.concat([self._read_ohlcv(row.NEXT_TICKER, row.END_DATE, row.END_DATE, dropna=False)
                              for _, row in adj_dates.iterrows()])
 
-        print(next_df)
         next_close = next_df.CLOSE
 
         if method == 'panama':

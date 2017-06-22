@@ -7,29 +7,74 @@ from hydrogen.portfoliooptimiser import Optimiser
 from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_clipper, signal_scalar, forecast_to_position
 from hydrogen.portopt import port_opt
 import hydrogen.system as system
+import blp.blp as blp
+
+bb = blp.BLPService()
+ticker = 'TY1 Comdty'
+new_df = pd.read_csv('data/tests/{ticker}.csv'.format(ticker=ticker), index_col=0, parse_dates=True)
+factory = InstrumentFactory()
+ty = factory.create_instrument(ticker, as_of_date='20150101')
+
+pd.concat([ty.unadjusted_ohlcv.CLOSE, new_df.CLOSE, ty.ohlcv.CLOSE], axis=1).dropna().head(33)
+
+pd.concat([ty.unadjusted_ohlcv.CLOSE, new_df.CLOSE, ty.ohlcv.CLOSE], axis=1).plot()
 
 TICKERS = [ "S 1 Comdty", "TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "W 1 Comdty", 'Z 1 Index', "VG1 Index", "C 1 Comdty" ]
 
 port = Portfolio('Test Portfolio')
 port.set_instruments(TICKERS, as_of_date='20150701')
-f = port.forecast()
+port.forecast()
+port.position()
+
+gross, cost, net = port.pnl(buffered_position=False)
+ticker = 'Z 1 Index'
+port.position()[ticker].plot()
+gross[ticker].cumsum().plot()
+cost[ticker].cumsum().plot()
+net[ticker].ix[:, 3:].cumsum().plot()
+
+gross, cost, net = port.pnl(buffered_position=False, delay=1)
+ticker = 'Z 1 Index'
+gross[ticker].cumsum().plot()
+cost[ticker].cumsum().plot()
+net[ticker].cumsum().plot()
+
+#####################################################################
+t = port.turnover()
+t2 = port.turnover(apply_buffer=False)
+t2
+xx = t2['S 1 Comdty']
+xx.apply(np.mean)
+
+x = xx.ix[:, 4]
+
+x.plot()
+port.apply_buffer(x, trade_to_edge=True).plot()
+pnl_ex_cost = port.pnl()
+pnl = port.pnl(include_cost=False)
+pnl['UX1 Index'].cumsum().plot()
+p['ES1 Index']
+for k, w in f.items():
+    w.plot()
+f
+
 f['S 1 Comdty'].ix[:, 3:7].plot()
 f['S 1 Comdty'].abs().mean() # approx 10
 f['S 1 Comdty'].isnull()["20060101":].sum() # should be zero
 
+f['Z 1 Index'].ix[:, 6].plot()
 ###################### forecast
-ticker = port.ticker_instrument_map['TY1 Comdty']
+ticker = port.ticker_instrument_map['ES1 Index']
+ticker.calc_annual_yield()
+ticker.calc_annual_yield().plot()
 ticker.unadjusted_ohlcv.CLOSE['20150101':].plot()
 ticker._back_ohlcv_df.CLOSE['20150101':].plot()
 
 ticker = port.ticker_instrument_map['S 1 Comdty']
-(carry('carry_3m', inst=ticker, span=22))["201504"".plot()
 (ticker.unadjusted_ohlcv.CLOSE["20160101":]-ticker._back_ohlcv_df.CLOSE["20160101":]).ewm(1).mean().plot()
 
-(ticker.unadjusted_ohlcv.CLOSE["20160101":]-ticker._back_ohlcv_df.CLOSE["20160101":]).ewm(22).mean().plot()
-
 ticker = port.ticker_instrument_map['CL1 Comdty']
-signal_scalar(carry('carry_3m', inst=ticker, span=64)).plot()
+signal_scalar(carry('carry_3m', inst=ticker, span=66)).plot()
 ticker = port.ticker_instrument_map['TY1 Comdty']
 signal_scalar(carry('carry_3m', inst=ticker)['20150101':].plot()
 
@@ -39,8 +84,6 @@ f['S 1 Comdty']["EWMAC_16_64"]['20150101':].plot()
 ticker = port.ticker_instrument_map['C 1 Comdty']
 ticker.unadjusted_ohlcv.CLOSE['20150101':].plot()
 ticker.unadjusted_ohlcv.CLOSE.plot()
-
-ticker._adj_info
 
 opt = Optimiser('None')
 

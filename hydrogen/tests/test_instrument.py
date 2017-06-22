@@ -119,7 +119,7 @@ class FutureTest(unittest.TestCase):
         self.assertEqual(adj_info.TICKER.iloc[0], 'Z H05 Index')
         self.assertEqual(adj_info.NEXT_TICKER.iloc[0], 'Z M05 Index')
         self.assertEqual(adj_info.ROLL_DT.iloc[0], pd.to_datetime('20050318').date())
-        self.assertEqual(adj_info.START_DATE.iloc[0], pd.to_datetime('20000101').date())
+        self.assertEqual(adj_info.START_DATE.iloc[0], pd.to_datetime('20050101').date())
         self.assertEqual(adj_info.END_DATE.iloc[0], pd.datetime(2005, 3, 17).date())
         self.assertEqual(adj_info.ROLL_DT.iloc[1], pd.to_datetime('20050617').date())
         self.assertEqual(adj_info.START_DATE.iloc[1], pd.to_datetime('20050318').date())
