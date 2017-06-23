@@ -160,5 +160,16 @@ class FutureTest(unittest.TestCase):
         self.assertEqual(len(future_ES_1_Index.ohlcv), len(future_VG_1_Index.ohlcv))
         self.assertEqual(len(future_CL_1_Index.ohlcv), len(future_VG_1_Index.ohlcv))
 
+    def _test_roll_front_future(self, ticker):
+        target_df = pd.read_csv('../data/tests/{ticker}.csv'.format(ticker=ticker), index_col=0, parse_dates=True)
+        factory = InstrumentFactory()
+        new_df = factory.create_instrument(ticker, as_of_date='20150101')
+        result_df = pd.concat([target_df.CLOSE, new_df.ohlcv.CLOSE], axis=1).dropna()
+        pd.util.testing.assert_series_equal(result_df.ix[:, 0], result_df.ix[:, 1])
+
+    def test_roll_front_future(self):
+        ticker_list = ['Z 1 Index', 'TY1 Comdty', 'CO1 Comdty', 'ES1 Index', 'VG1 Index']
+        [ self._test_roll_front_future(ticker) for ticker in ticker_list ]
+
 if __name__ == '__main__':
     unittest.main(warnings='ignore')
