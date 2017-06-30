@@ -2,37 +2,31 @@ import matplotlib.pyplot as plt
 import logging
 import numpy as np
 import pandas as pd
-from hydrogen.instrument import Future, InstrumentFactory, Instrument
+from hydrogen.instrument import InstrumentFactory, Instrument
 from hydrogen.portfolio import Portfolio
 from hydrogen.portfoliooptimiser import Optimiser
 from hydrogen.trading_rules import EWMAC, carry, breakout, long_only, signal_mixer, signal_clipper, signal_scalar, forecast_to_position
 from hydrogen.portopt import port_opt
 import hydrogen.system as system
-import blp.blp as blp
 
-bb = blp.BLPService()
-logger = logging.getLogger(__name__)
-OHLCV_FIELDS = ['PX_OPEN', 'PX_HIGH', 'PX_LOW', 'PX_LAST', 'PX_VOLUME']
-ticker = 'Z 1 Index'
-df = bb.BDH(ticker, OHLCV_FIELDS, '20050101', '20150101')
-
-df
-new_df = pd.read_csv('data/tests/{ticker}.csv'.format(ticker=ticker), index_col=0, parse_dates=True)
-
-factory = InstrumentFactory()
-
-ty = factory.create_instrument(ticker, as_of_date='20150101')
-ty.ohlcv.tail()
-pd.concat([ty.unadjusted_ohlcv.CLOSE, new_df.CLOSE, ty.ohlcv.CLOSE], axis=1).dropna().head(33)
-
-pd.concat([ty.unadjusted_ohlcv.CLOSE, new_df.CLOSE, ty.ohlcv.CLOSE], axis=1).plot()
+# ticker = 'S 1 Comdty'
+# new_df = pd.read_csv('data/tests/{ticker}.csv'.format(ticker=ticker), index_col=0, parse_dates=True)
+# factory = InstrumentFactory()
+# df = factory.create_instrument(ticker, as_of_date='20150701')
+# df.ohlcv.tail()
+# pd.concat([df.unadjusted_ohlcv.CLOSE, df.ohlcv.CLOSE, new_df.CLOSE], axis=1).dropna()
+# pd.concat([df.unadjusted_ohlcv.CLOSE, df.ohlcv.CLOSE, new_df.CLOSE], axis=1)['20150101':].plot()
 
 TICKERS = [ "S 1 Comdty", "TY1 Comdty", "LH1 Comdty", "CL1 Comdty", "ES1 Index", "UX1 Index", "W 1 Comdty", 'Z 1 Index', "VG1 Index", "C 1 Comdty" ]
-
 port = Portfolio('Test Portfolio')
 port.set_instruments(TICKERS, as_of_date='20150701')
-port.forecast()
+
+forecast = port.forecast()
+
 port.position()
+port.position_cost_in_SR()['TY1 Comdty']
+port.position_cost_in_SR()['Z 1 Index'].plot()
+port.pnl()['Z 1 Index'].plot()
 
 gross, cost, net = port.pnl(buffered_position=False)
 ticker = 'Z 1 Index'
@@ -108,7 +102,7 @@ bla
 ### missout cont size
 cost_in_SR = pd.concat([ i.cost_in_SR for i in subset ], axis=1)
 
-pd.concat([ i.daily_price_vol for i in subset ], axis=1)[:'20150701'].plot()
+pd.concat([i.vol_pct for i in subset], axis=1)[:'20150701'].plot()
 pd.concat([ i.unadjusted_ohlcv.CLOSE for i in subset ], axis=1)[:'20150701'].plot()
 
 rules = [# (EWMAC, {"fast_span": 2, "slow_span": 8} ) ,

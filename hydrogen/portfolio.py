@@ -25,17 +25,6 @@ class Portfolio:
         instrument_factory = InstrumentFactory()
         self.ticker_instrument_map = { ticker:instrument_factory.create_instrument(ticker, as_of_date=as_of_date) for ticker in ticker_list }
 
-    def _calc_forecast(self, clip=False):
-        res = {}
-        for ticker, inst in self.ticker_instrument_map.items():
-            forecasts = [ signal_scalar(rule(rulename, inst, **kargs)) for rulename, rule, kargs in self.rules ]
-            if clip:
-                forecasts = [ (signal_clipper(forecast)) for forecast in forecasts ]
-
-            res[ticker] = pd.concat(forecasts, axis=1)
-
-        self._forecast = res
-
     def _all_tickers_if_empty(self, ticker_list):
         if type(ticker_list) is str:
             ticker_list = [ ticker_list ]
@@ -55,8 +44,23 @@ class Portfolio:
         return rule_list
 
     def forecast(self, ticker_list=[], rule_list=[]):
+        ''' Calculate the forecast for each rule for each ticker given, with
+            the results are cached by default
+        '''
+
+        def _calc_forecast(clip=False):
+            res = {}
+            for ticker, inst in self.ticker_instrument_map.items():
+                forecasts = [signal_scalar(rule(rulename, inst, **kargs)) for rulename, rule, kargs in self.rules]
+                if clip:
+                    forecasts = [(signal_clipper(forecast)) for forecast in forecasts]
+
+                res[ticker] = pd.concat(forecasts, axis=1)
+
+            self._forecast = res
+
         if not self._forecast:
-            self._calc_forecast()
+            _calc_forecast(clip=False)
 
         ticker_list = self._all_tickers_if_empty(ticker_list)
         rule_list = self._all_rules_if_empty(rule_list)
@@ -64,18 +68,8 @@ class Portfolio:
         res = { ticker:self._forecast[ticker][rule_list] for ticker in ticker_list }
         return res
 
-    def _calc_position(self):
-        res = {}
-
-        ticker_list = self._forecast.keys()
-        volatility_scalar = { ticker:system.vol_target_cash_daily / self.ticker_instrument_map[ticker].instrument_value_vol for ticker in ticker_list }
-
-        position = {ticker: self._forecast[ticker].multiply(volatility_scalar[ticker], axis=0) / system.avg_abs_forecast
-                    for ticker in ticker_list}
-
-        self._position = position
-
-    def position(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False):
+    def position(self, ticker_list=[], rule_list=[], buffered_position=False, trade_to_edge=False,
+                 round_position=False):
         def apply_buffer_one_signal(opt_pos, trade_to_edge, round_position):
             """
             Apply a buffer to a position
@@ -84,7 +78,7 @@ class Portfolio:
             If we're rounding positions, then we floor and ceiling the buffers.
             :param opt_pos: optimal position
             :type opt_pos: pd.Series
-            :param trade_to_edge: Trade to the edge (TRue) or the optimal (False)
+            :param trade_to_edge: Trade to the edge (True) or the optimal (False)
             :type trade_to_edge: bool
             :param round_position: Produce rounded positions
             :type round_position: bool
@@ -145,8 +139,21 @@ class Portfolio:
             buffered_position[opt_pos.isnull()] = np.nan
             return buffered_position
 
+        def _calc_position():
+            res = {}
+
+            ticker_list = self._forecast.keys()
+            volatility_scalar = {
+            ticker: system.vol_target_cash_daily / self.ticker_instrument_map[ticker].vol_price(to_usd=True) for ticker
+            in ticker_list}
+            position = {
+            ticker: self._forecast[ticker].multiply(volatility_scalar[ticker], axis=0) / system.avg_abs_forecast for
+            ticker in ticker_list}
+
+            self._position = position
+
         if not self._position:
-            self._calc_position()
+            _calc_position()
 
         ticker_list = self._all_tickers_if_empty(ticker_list)
         rule_list = self._all_rules_if_empty(rule_list)
@@ -159,20 +166,35 @@ class Portfolio:
 
         return position
 
-    def turnover(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False):
+    def forecast_turnover(self, ticker_list=[], rule_list=[]):
+        return {key: (value / system.target_abs_forecast).diff().abs().mean() for key, value in
+                self.forecast(ticker_list, rule_list).items()}
+
+    def forecast_cost_in_SR(self, ticker_list=[], rule_list=[]):
+        forecast_turnover = self.forecast_turnover(ticker_list, rule_list)
+        cost_in_SR = {key: self.ticker_instrument_map[key].cost_in_SR.apply(lambda x: x * value) for key, value in
+                      forecast_turnover.items()}
+        return cost_in_SR
+
+    def position_turnover(self, ticker_list=[], rule_list=[], buffered_position=False, trade_to_edge=False,
+                          round_position=False):
         position = self.position(ticker_list, rule_list, buffered_position, trade_to_edge, round_position)
         one_way_turnover = {key: value.diff().abs() for key, value in position.items()}
         return one_way_turnover
 
-    def cost(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False):
-        ticker_list = self._all_tickers_if_empty(ticker_list)
-        rule_list = self._all_rules_if_empty(rule_list)
-        one_way_turnover = self.turnover(ticker_list, rule_list, buffered_position, trade_to_edge, round_position)
-        cost = {ticker: self.ticker_instrument_map[ticker].cost for ticker in ticker_list}
-        res = {ticker: one_way_turnover[ticker].multiply(cost[ticker], axis=0) for ticker in ticker_list}
-        return res
+    def position_cost_in_SR(self, ticker_list=[], rule_list=[]):
+        position_turnover = self.position_turnover(ticker_list, rule_list)
+        cost_in_SR = {key: value.apply(lambda x: x * self.ticker_instrument_map[key].cost_in_SR) for key, value in
+                      position_turnover.items()}
+        return cost_in_SR
 
-    def pnl(self, ticker_list=[], rule_list=[], buffered_position=True, trade_to_edge=False, round_position=False,
+    def position_cost(self, ticker_list=[], rule_list=[]):
+        position_turnover = self.position_turnover(ticker_list, rule_list)
+        cost_in_SR = {key: value.apply(lambda x: x * self.ticker_instrument_map[key].cost) for key, value in
+                      position_turnover.items()}
+        return cost_in_SR
+
+    def pnl(self, ticker_list=[], rule_list=[], buffered_position=False, trade_to_edge=False, round_position=False,
             delay=0):
         ticker_list = self._all_tickers_if_empty(ticker_list)
         rule_list = self._all_rules_if_empty(rule_list)
@@ -185,7 +207,7 @@ class Portfolio:
         gross_pnl = {ticker: position[ticker].shift(delay).multiply(pnl_one_contract[ticker], axis=0) for ticker in
                      ticker_list}
 
-        cost = self.cost(ticker_list, rule_list, buffered_position, trade_to_edge, round_position)
+        cost = self.position_cost(ticker_list, rule_list)
         net_pnl = {ticker: gross_pnl[ticker].add(-cost[ticker]) for ticker in ticker_list}
 
         return gross_pnl, cost, net_pnl

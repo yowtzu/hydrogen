@@ -86,9 +86,18 @@ class Instrument:
     def price_diff(self):
         return self.ohlcv.CLOSE.diff()
 
-    @property
-    def vol(self):
-        return hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, annualised=True)
+    def vol_pct(self):
+        '''' SD of % daily change '''
+        return 100 * hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, annualised=False)
+
+    def vol_price(self, to_usd=False):
+        ''' ccy = None means local currency '''
+        vol = self.vol_pct() * self.cont_size * self.unadjusted_ohlcv.CLOSE
+
+        if to_usd and self.ccy != 'USD':
+            vol = vol * self.fx.ohlcv.CLOSE[self.instrument_currency_vol.index]
+
+        return vol
 
     @property
     def cont_size(self):
@@ -99,40 +108,18 @@ class Instrument:
         return self._tick_size
 
     @property
-    def block_value(self):
-        ''' The amount of PnL in local cash term  for 1% price movement '''
-        return 0.01 * self.cont_size * self.unadjusted_ohlcv.CLOSE
-
-    @property
-    def daily_price_vol(self):
-        '''' SD of % daily change '''
-        return 100*hydrogen.analytics.vol(self.ohlcv, method='YZ', window=system.n_bday_in_3m, annualised=False)
-
-    @property
-    def instrument_currency_vol(self):
-        return self.block_value * self.daily_price_vol
-
-    @property
-    def instrument_value_vol(self):
-        """ convert to from local ccy to usd """
-        if self.ccy=='USD':
-            return self.instrument_currency_vol
-        else:
-            return self.instrument_currency_vol *  self.fx.ohlcv.CLOSE[self.instrument_currency_vol.index]
-
-    @property
     def cost(self):
         spread_cost = self.tick_size / 2 * self.cont_size
-        ticker_cost = 0
+        ticker_cost = spread_cost * 0.1  # simplistic assumption
         return spread_cost + ticker_cost
 
     @property
     def cost_in_SR(self):
-        return 2 * self.cost / (16 * self.instrument_currency_vol)
+        return 2 * self.cost / (system.root_n_bday_in_year * self.vol_price)
 
     def calc_annual_yield(self):
         ct_distance = self._static_df.MONTHS_BTW_CT.iloc[0]
-        annualised_sd_return = self.daily_price_vol * system.root_n_bday_in_year
+        annualised_sd_return = self.vol_pct() * system.root_n_bday_in_year
         annualised_yield = (self.unadjusted_ohlcv.CLOSE - self._back_ohlcv_df.CLOSE) / ct_distance / annualised_sd_return
         return annualised_yield.ffill()
 
